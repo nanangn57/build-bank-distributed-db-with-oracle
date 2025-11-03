@@ -1,0 +1,13 @@
+# Dashboard Application Dependencies
+#
+# All dependencies have been merged into the root requirements.txt file.
+# 
+# This file is kept for backward compatibility but all dependencies
+# are now managed in the root requirements.txt
+#
+# Installation:
+#   From project root: pip install -r requirements.txt
+#   From dashboard dir: pip install -r ../requirements.txt
+
+# Reference root requirements.txt
+-r ../requirements.txt

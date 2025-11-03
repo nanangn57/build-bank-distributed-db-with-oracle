@@ -1,0 +1,39 @@
+# Oracle Bank Distributed Database - Python Dependencies
+# 
+# This project uses Python for the dashboard application.
+# Install dependencies with: pip install -r requirements.txt
+#
+# All dependencies for the project (including dashboard) are listed here.
+
+# ============================================
+# Core Web Framework
+# ============================================
+Flask==3.0.0
+Flask-CORS==4.0.0
+
+# ============================================
+# Oracle Database Driver
+# ============================================
+# Primary driver (works in thin mode without Oracle Client)
+oracledb==2.0.0
+
+# Fallback driver (optional - uncomment if needed)
+# Requires Oracle Instant Client installation
+# cx_Oracle==8.3.0
+
+# ============================================
+# Flask Dependencies (pinned for consistency)
+# ============================================
+Werkzeug==3.1.3
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+click==8.3.0
+blinker==1.9.0
+itsdangerous==2.2.0
+
+# ============================================
+# Development/Testing (optional)
+# ============================================
+# Uncomment for development
+# pytest==7.4.4
+# pytest-flask==1.3.0

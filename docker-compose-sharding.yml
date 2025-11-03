@@ -1,0 +1,127 @@
+version: '3.8'
+
+services:
+  # Shard Catalog (Central Metadata Repository)
+  # This manages shard metadata and routing
+  oracle-catalog:
+    image: container-registry.oracle.com/database/free:latest
+    container_name: oracle-catalog
+    ports:
+      - "1521:1521"  # Oracle Database
+      - "5500:5500"  # Oracle Enterprise Manager
+    environment:
+      - ORACLE_PWD=${ORACLE_PWD:-tuPDqNJWLr7QcA}
+    volumes:
+      - catalog-data:/opt/oracle/oradata
+      - ./sql/sharding:/opt/oracle/scripts/sql:ro
+    cap_add:
+      - CAP_SYS_NICE
+    mem_limit: 4g
+    hostname: oracle-catalog
+    networks:
+      - oracle-network
+    healthcheck:
+      test: ["CMD-SHELL", "sqlplus -s /nolog @/tmp/healthcheck.sql || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+
+  # Shard 1 - North America Region
+  # Accounts 1-10M distributed to this shard
+  oracle-shard1:
+    image: container-registry.oracle.com/database/free:latest
+    container_name: oracle-shard1
+    ports:
+      - "1522:1521"  # Oracle Database
+      - "5501:5500"  # Oracle Enterprise Manager
+    environment:
+      - ORACLE_PWD=${ORACLE_PWD:-tuPDqNJWLr7QcA}
+    volumes:
+      - shard1-data:/opt/oracle/oradata
+      - ./sql/sharding:/opt/oracle/scripts/sql:ro
+    cap_add:
+      - CAP_SYS_NICE
+    mem_limit: 4g
+    hostname: oracle-shard1
+    networks:
+      - oracle-network
+    depends_on:
+      - oracle-catalog
+    healthcheck:
+      test: ["CMD-SHELL", "sqlplus -s /nolog @/tmp/healthcheck.sql || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+
+  # Shard 2 - Europe Region
+  # Accounts 10M-20M distributed to this shard
+  oracle-shard2:
+    image: container-registry.oracle.com/database/free:latest
+    container_name: oracle-shard2
+    ports:
+      - "1523:1521"  # Oracle Database
+      - "5502:5500"  # Oracle Enterprise Manager
+    environment:
+      - ORACLE_PWD=${ORACLE_PWD:-tuPDqNJWLr7QcA}
+    volumes:
+      - shard2-data:/opt/oracle/oradata
+      - ./sql/sharding:/opt/oracle/scripts/sql:ro
+    cap_add:
+      - CAP_SYS_NICE
+    mem_limit: 4g
+    hostname: oracle-shard2
+    networks:
+      - oracle-network
+    depends_on:
+      - oracle-catalog
+    healthcheck:
+      test: ["CMD-SHELL", "sqlplus -s /nolog @/tmp/healthcheck.sql || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+
+  # Shard 3 - Asia Pacific Region
+  # Accounts 20M-30M distributed to this shard
+  oracle-shard3:
+    image: container-registry.oracle.com/database/free:latest
+    container_name: oracle-shard3
+    ports:
+      - "1524:1521"  # Oracle Database
+      - "5503:5500"  # Oracle Enterprise Manager
+    environment:
+      - ORACLE_PWD=${ORACLE_PWD:-tuPDqNJWLr7QcA}
+    volumes:
+      - shard3-data:/opt/oracle/oradata
+      - ./sql/sharding:/opt/oracle/scripts/sql:ro
+    cap_add:
+      - CAP_SYS_NICE
+    mem_limit: 4g
+    hostname: oracle-shard3
+    networks:
+      - oracle-network
+    depends_on:
+      - oracle-catalog
+    healthcheck:
+      test: ["CMD-SHELL", "sqlplus -s /nolog @/tmp/healthcheck.sql || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+
+volumes:
+  catalog-data:
+    driver: local
+  shard1-data:
+    driver: local
+  shard2-data:
+    driver: local
+  shard3-data:
+    driver: local
+
+networks:
+  oracle-network:
+    driver: bridge
+
