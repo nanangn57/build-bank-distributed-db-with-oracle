@@ -18,6 +18,7 @@ GRANT CREATE VIEW TO bank_app;
 GRANT CREATE PROCEDURE TO bank_app;
 GRANT CREATE TRIGGER TO bank_app;
 GRANT CREATE MATERIALIZED VIEW TO bank_app;
+GRANT CREATE DATABASE LINK TO bank_app;  -- Required for catalog to query shards
 
 -- Grant for distributed transactions
 GRANT EXECUTE ON DBMS_LOCK TO bank_app;

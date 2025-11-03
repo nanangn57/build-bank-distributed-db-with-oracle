@@ -193,12 +193,12 @@ build-bank-distributed-db-with-oracle/
 ## Connection Details
 
 ### Catalog Database
-- **Host**: `localhost` (or `oracle-catalog` from within network)
+- **Host**: `localhost` (or `oracle-catalog` from within Docker network)
 - **Port**: `1521`
-- **Service**: `FREEPDB1`
+- **Service**: `freepdb1` (lowercase - case-sensitive for JDBC connections)
 - **Users**: 
   - `sys` / (from .env ORACLE_PWD)
-  - `bank_app` / (from .env BANK_APP_PASSWORD)
+  - `bank_app` / (from .env BANK_APP_PASSWORD or default `BankAppPass123`)
 
 ### Shard Databases
 - **Shard 1**: `localhost:1522`
@@ -207,10 +207,42 @@ build-bank-distributed-db-with-oracle/
 
 ### JDBC Connection Strings
 ```properties
-JDBC_URL_CATALOG=jdbc:oracle:thin:@localhost:1521/FREEPDB1
-JDBC_URL_SHARD1=jdbc:oracle:thin:@localhost:1522/FREEPDB1
-JDBC_URL_SHARD2=jdbc:oracle:thin:@localhost:1523/FREEPDB1
-JDBC_URL_SHARD3=jdbc:oracle:thin:@localhost:1524/FREEPDB1
+# Note: Service name must be lowercase for JDBC (case-sensitive)
+# SQL*Plus accepts both FREEPDB1 and freepdb1, but JDBC requires exact case
+JDBC_URL_CATALOG=jdbc:oracle:thin:@//localhost:1521/freepdb1
+JDBC_URL_SHARD1=jdbc:oracle:thin:@//localhost:1522/freepdb1
+JDBC_URL_SHARD2=jdbc:oracle:thin:@//localhost:1523/freepdb1
+JDBC_URL_SHARD3=jdbc:oracle:thin:@//localhost:1524/freepdb1
+```
+
+**Connection Properties:**
+- **Username**: `bank_app`
+- **Password**: `BankAppPass123` (or from `.env` file `BANK_APP_PASSWORD`)
+
+**Important Notes:**
+- JDBC URLs require the `//` format when using service names: `@//host:port/service_name`
+- Service name must be lowercase `freepdb1` (JDBC is case-sensitive)
+- SQL*Plus accepts both `FREEPDB1` and `freepdb1`, but JDBC connections require the exact case as registered in the listener
+
+**Java Example:**
+```java
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+String url = "jdbc:oracle:thin:@//localhost:1522/freepdb1";
+String username = "bank_app";
+String password = "BankAppPass123";
+
+try {
+    Connection conn = DriverManager.getConnection(url, username, password);
+    System.out.println("Connection successful!");
+    // ... use connection
+    conn.close();
+} catch (SQLException e) {
+    System.err.println("Connection failed: " + e.getMessage());
+    e.printStackTrace();
+}
 ```
 
 ## Web Interfaces
@@ -301,6 +333,11 @@ docker-compose -f docker-compose-sharding.yml down -v
 - Wait 2-5 minutes after container start for initialization
 - Check logs for "DATABASE IS READY TO USE!" message
 - Verify passwords in .env file match container environment
+- **JDBC Connection Issues**: 
+  - Use lowercase service name `freepdb1` (JDBC is case-sensitive)
+  - Use `//` format: `jdbc:oracle:thin:@//host:port/service_name`
+  - Verify service is registered: `docker exec <container> lsnrctl services`
+  - Check error message: ORA-12514 means service name mismatch, ORA-01005 means invalid password
 
 ### Sharding Setup Fails
 - Ensure all databases are fully initialized before running setup

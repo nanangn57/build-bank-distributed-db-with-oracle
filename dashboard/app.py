@@ -6,54 +6,11 @@ Provides REST API endpoints for dashboard statistics and data insertion
 
 from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
-try:
-    import oracledb
-    # Use python-oracledb (thick mode is optional, works in thin mode without Oracle Client)
-except ImportError:
-    # Fallback to cx_Oracle if oracledb not available
-    import cx_Oracle as oracledb
 import os
-from datetime import datetime
+from utils import get_db_connection, get_user_region, get_account_region, cursor_to_dict, cursor_to_dicts
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
-
-# Database configuration
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '1521'),
-    'service_name': os.getenv('DB_SERVICE_NAME', 'FREEPDB1'),
-    'user': os.getenv('DB_USER', 'bank_app'),
-    'password': os.getenv('DB_PASSWORD', 'BankAppPass123')
-}
-
-def get_db_connection():
-    """Create and return database connection"""
-    try:
-        # Use oracledb (works in thin mode without Oracle Client)
-        host = DB_CONFIG['host']
-        
-        # Create connection string
-        dsn = oracledb.makedsn(
-            host,
-            DB_CONFIG['port'],
-            service_name=DB_CONFIG['service_name']
-        )
-        
-        # oracledb.connect can use dsn as positional or keyword argument
-        connection = oracledb.connect(
-            user=DB_CONFIG['user'],
-            password=DB_CONFIG['password'],
-            dsn=dsn
-        )
-        print(f"Successfully connected to database at {host}:{DB_CONFIG['port']}")
-        return connection
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        print(f"Attempted connection to: {host}:{DB_CONFIG['port']}/{DB_CONFIG['service_name']}")
-        import traceback
-        traceback.print_exc()
-        return None
 
 @app.route('/')
 def index():
@@ -70,23 +27,7 @@ def get_regional_stats():
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM dashboard_regional_stats")
-        
-        columns = [desc[0] for desc in cursor.description]
-        results = []
-        
-        for row in cursor.fetchall():
-            row_dict = {}
-            # Convert to lowercase keys for consistency
-            for i, col in enumerate(columns):
-                key = col.lower()
-                value = row[i]
-                if isinstance(value, datetime):
-                    row_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-                elif isinstance(value, (int, float)) and value is not None:
-                    row_dict[key] = float(value)
-                else:
-                    row_dict[key] = value
-            results.append(row_dict)
+        results = cursor_to_dicts(cursor)
         
         cursor.close()
         conn.close()
@@ -105,24 +46,7 @@ def get_overall_stats():
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM dashboard_overall_stats")
-        
-        columns = [desc[0] for desc in cursor.description]
-        row = cursor.fetchone()
-        
-        if row:
-            result = {}
-            # Convert to lowercase keys for consistency
-            for i, col in enumerate(columns):
-                key = col.lower()
-                value = row[i]
-                if isinstance(value, datetime):
-                    result[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-                elif isinstance(value, (int, float)) and value is not None:
-                    result[key] = float(value)
-                else:
-                    result[key] = value
-        else:
-            result = {}
+        result = cursor_to_dict(cursor)
         
         cursor.close()
         conn.close()
@@ -144,24 +68,7 @@ def get_recent_transactions():
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM dashboard_recent_transactions")
-        
-        columns = [desc[0] for desc in cursor.description]
-        results = []
-        
-        for row in cursor.fetchall():
-            row_dict = {}
-            # Convert to lowercase keys for consistency
-            for i, col in enumerate(columns):
-                key = col.lower()
-                value = row[i]
-                # Convert datetime to string if present
-                if isinstance(value, datetime):
-                    row_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-                elif isinstance(value, (int, float)) and value is not None:
-                    row_dict[key] = float(value)
-                else:
-                    row_dict[key] = value
-            results.append(row_dict)
+        results = cursor_to_dicts(cursor)
         
         cursor.close()
         conn.close()
@@ -180,23 +87,7 @@ def get_accounts_by_region():
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM dashboard_accounts_by_region")
-        
-        columns = [desc[0] for desc in cursor.description]
-        results = []
-        
-        for row in cursor.fetchall():
-            row_dict = {}
-            # Convert to lowercase keys for consistency
-            for i, col in enumerate(columns):
-                key = col.lower()
-                value = row[i]
-                if isinstance(value, datetime):
-                    row_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-                elif isinstance(value, (int, float)) and value is not None:
-                    row_dict[key] = float(value)
-                else:
-                    row_dict[key] = value
-            results.append(row_dict)
+        results = cursor_to_dicts(cursor)
         
         cursor.close()
         conn.close()
@@ -215,23 +106,7 @@ def get_transactions_by_date():
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM dashboard_transactions_by_date")
-        
-        columns = [desc[0] for desc in cursor.description]
-        results = []
-        
-        for row in cursor.fetchall():
-            row_dict = {}
-            # Convert to lowercase keys for consistency
-            for i, col in enumerate(columns):
-                key = col.lower()
-                value = row[i]
-                if isinstance(value, datetime):
-                    row_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-                elif isinstance(value, (int, float)) and value is not None:
-                    row_dict[key] = float(value)
-                else:
-                    row_dict[key] = value
-            results.append(row_dict)
+        results = cursor_to_dicts(cursor)
         
         cursor.close()
         conn.close()
@@ -243,24 +118,32 @@ def get_transactions_by_date():
 @app.route('/api/insert/user', methods=['POST'])
 def insert_user():
     """Insert a new user"""
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    
     try:
         data = request.json
+        region = data.get('region', 'NA').upper()
+        
+        # Validate region
+        if region not in ['NA', 'EU', 'APAC']:
+            return jsonify({'error': f'Invalid region: {region}. Must be NA, EU, or APAC'}), 400
+        
+        # Connect to the appropriate shard based on region
+        conn = get_db_connection(shard_region=region)
+        if not conn:
+            return jsonify({'error': f'Database connection failed to shard for region {region}'}), 500
+        
         cursor = conn.cursor()
         
+        # Note: user_id is auto-generated by trigger based on region
         cursor.execute("""
-            INSERT INTO users (user_id, username, email, full_name, phone, address, region)
-            VALUES (user_seq.NEXTVAL, :username, :email, :full_name, :phone, :address, :region)
+            INSERT INTO users (username, email, full_name, phone, address, region)
+            VALUES (:username, :email, :full_name, :phone, :address, :region)
         """, {
             'username': data.get('username'),
             'email': data.get('email'),
             'full_name': data.get('full_name'),
             'phone': data.get('phone', None),
             'address': data.get('address', None),
-            'region': data.get('region', 'NA')
+            'region': region
         })
         
         conn.commit()
@@ -274,29 +157,41 @@ def insert_user():
 @app.route('/api/insert/account', methods=['POST'])
 def insert_account():
     """Insert a new account"""
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    
     try:
         data = request.json
-        cursor = conn.cursor()
+        user_id = data.get('user_id')
         
+        if not user_id:
+            return jsonify({'error': 'user_id is required'}), 400
+        
+        # Look up user's region from catalog
+        region = get_user_region(user_id)
+        if not region:
+            return jsonify({'error': f'User with user_id {user_id} not found'}), 404
+        
+        # Connect to the appropriate shard based on user's region
+        shard_conn = get_db_connection(shard_region=region)
+        if not shard_conn:
+            return jsonify({'error': f'Database connection failed to shard for region {region}'}), 500
+        
+        cursor = shard_conn.cursor()
+        
+        # Note: account_id is auto-generated, region should match user's region
         cursor.execute("""
-            INSERT INTO accounts (account_id, user_id, account_number, account_type, balance, currency, region)
-            VALUES (account_seq.NEXTVAL, :user_id, :account_number, :account_type, :balance, :currency, :region)
+            INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
+            VALUES (:user_id, :account_number, :account_type, :balance, :currency, :region)
         """, {
-            'user_id': data.get('user_id'),
+            'user_id': user_id,
             'account_number': data.get('account_number'),
             'account_type': data.get('account_type'),
             'balance': data.get('balance', 0),
             'currency': data.get('currency', 'USD'),
-            'region': data.get('region', 'NA')
+            'region': region
         })
         
-        conn.commit()
+        shard_conn.commit()
         cursor.close()
-        conn.close()
+        shard_conn.close()
         
         return jsonify({'success': True, 'message': 'Account inserted successfully'})
     except Exception as e:
@@ -305,10 +200,7 @@ def insert_account():
 @app.route('/api/insert/transaction', methods=['POST'])
 def insert_transaction():
     """Insert a new transaction"""
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    
+    conn = None
     try:
         data = request.json
         print(f"Received transaction data: {data}")  # Debug log
@@ -347,6 +239,19 @@ def insert_transaction():
             if not from_account_id:
                 return jsonify({'error': 'Withdrawal requires from_account_id'}), 400
             to_account_id = None
+        
+        # Determine which account_id to use for region lookup
+        account_id_for_region = from_account_id if from_account_id else to_account_id
+        
+        # Look up account region from catalog to determine which shard to use
+        region = get_account_region(account_id_for_region)
+        if not region:
+            return jsonify({'error': f'Account with account_id {account_id_for_region} not found'}), 404
+        
+        # Connect to the appropriate shard based on account's region
+        conn = get_db_connection(shard_region=region)
+        if not conn:
+            return jsonify({'error': f'Database connection failed to shard for region {region}'}), 500
         
         cursor = conn.cursor()
         
@@ -434,7 +339,8 @@ def get_users():
     
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT user_id, username, full_name FROM users ORDER BY username")
+        # Use users_all view which unions data from all shards via catalog
+        cursor.execute("SELECT user_id, username, full_name FROM users_all ORDER BY username")
         
         results = []
         for row in cursor.fetchall():
@@ -461,6 +367,7 @@ def get_accounts():
     try:
         cursor = conn.cursor()
         # Get accounts with user information for the list view
+        # Use union views which combine data from all shards via catalog
         cursor.execute("""
             SELECT 
                 a.account_id,
@@ -474,29 +381,11 @@ def get_accounts():
                 u.user_id,
                 u.username,
                 u.full_name
-            FROM accounts a
-            LEFT JOIN users u ON a.user_id = u.user_id
+            FROM accounts_all a
+            LEFT JOIN users_all u ON a.user_id = u.user_id AND a.shard_location = u.shard_location
             ORDER BY a.account_id
         """)
-        
-        columns = [desc[0] for desc in cursor.description]
-        results = []
-        
-        for row in cursor.fetchall():
-            row_dict = {}
-            # Convert to lowercase keys for consistency
-            for i, col in enumerate(columns):
-                key = col.lower()
-                value = row[i]
-                # Convert datetime to string if present
-                if isinstance(value, datetime):
-                    row_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-                # Convert numeric values
-                elif key == 'balance' and value is not None:
-                    row_dict[key] = float(value)
-                else:
-                    row_dict[key] = value
-            results.append(row_dict)
+        results = cursor_to_dicts(cursor)
         
         cursor.close()
         conn.close()
@@ -516,6 +405,7 @@ def get_users_list():
     
     try:
         cursor = conn.cursor()
+        # Use union views which combine data from all shards via catalog
         cursor.execute("""
             SELECT 
                 u.user_id,
@@ -528,32 +418,12 @@ def get_users_list():
                 u.created_date,
                 COUNT(DISTINCT a.account_id) AS account_count,
                 COALESCE(SUM(a.balance), 0) AS total_balance
-            FROM users u
-            LEFT JOIN accounts a ON u.user_id = a.user_id
+            FROM users_all u
+            LEFT JOIN accounts_all a ON u.user_id = a.user_id AND u.shard_location = a.shard_location
             GROUP BY u.user_id, u.username, u.email, u.full_name, u.phone, u.address, u.region, u.created_date
             ORDER BY u.user_id
         """)
-        
-        columns = [desc[0] for desc in cursor.description]
-        results = []
-        
-        for row in cursor.fetchall():
-            row_dict = {}
-            # Convert to lowercase keys for consistency
-            for i, col in enumerate(columns):
-                key = col.lower()
-                value = row[i]
-                # Convert datetime to string if present
-                if isinstance(value, datetime):
-                    row_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-                # Convert numeric values
-                elif key in ['account_count'] and value is not None:
-                    row_dict[key] = int(value) if value else 0
-                elif key == 'total_balance' and value is not None:
-                    row_dict[key] = float(value)
-                else:
-                    row_dict[key] = value
-            results.append(row_dict)
+        results = cursor_to_dicts(cursor)
         
         cursor.close()
         conn.close()
@@ -565,10 +435,6 @@ def get_users_list():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    # Check if running in Docker
-    if os.path.exists('/.dockerenv'):
-        DB_CONFIG['host'] = 'oracle-catalog'
-    
     # Use port 5001 to avoid macOS AirPlay conflict on port 5000
     port = int(os.getenv('PORT', 5001))
     print(f"\n🚀 Starting Dashboard Server on http://localhost:{port}")

@@ -111,37 +111,69 @@ for shard_num in 1 2 3; do
     echo ""
 done
 
-# Create Sharded Tables on Catalog
+# Create Catalog Metadata (Catalog should only have metadata, not application data)
 echo "========================================="
-echo "Step 5: Creating Sharded Tables"
+echo "Step 5: Creating Catalog Metadata"
 echo "========================================="
 
-echo "Creating sharded tables on catalog..."
-docker exec -i oracle-catalog sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < "$SQL_DIR/04-create-sharded-tables.sql"
+echo "Creating metadata tables on catalog..."
+docker exec -i oracle-catalog sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < "$SQL_DIR/09-create-catalog-metadata.sql"
 
-echo "✅ Sharded tables created"
+echo "Creating database links to shards..."
+docker exec -i oracle-catalog sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < "$SQL_DIR/10-create-catalog-database-links.sql"
+
+echo "Creating union views for cross-shard queries..."
+docker exec -i oracle-catalog sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < "$SQL_DIR/11-create-catalog-union-views.sql"
+
+echo "Creating dashboard views for statistics..."
+docker exec -i oracle-catalog sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < "$SQL_DIR/08-create-dashboard-views.sql"
+
+echo "✅ Catalog metadata and views created"
 echo ""
 
-# Insert Sample Data
+# Create Sharded Tables on Each Shard
 echo "========================================="
-echo "Step 6: Inserting Sample Data"
+echo "Step 6: Creating Sharded Tables on Shards"
 echo "========================================="
 
-echo "Inserting sample data..."
-docker exec -i oracle-catalog sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < "$SQL_DIR/05-insert-sample-data.sql"
+echo "Creating sharded tables on each shard..."
+for shard_num in 1 2 3; do
+    echo "Creating tables on shard $shard_num..."
+    docker exec -i oracle-shard$shard_num sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < "$SQL_DIR/04-create-sharded-tables.sql"
+    echo "✅ Tables created on shard $shard_num"
+done
 
-echo "✅ Sample data inserted"
 echo ""
 
-# Create Procedures
+# Create Procedures on Each Shard
 echo "========================================="
-echo "Step 7: Creating Stored Procedures"
+echo "Step 7: Creating Stored Procedures on Shards"
 echo "========================================="
 
-echo "Creating procedures..."
-docker exec -i oracle-catalog sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < "$SQL_DIR/06-create-procedures.sql"
+echo "Creating procedures on each shard..."
+for shard_num in 1 2 3; do
+    echo "Creating procedures on shard $shard_num..."
+    docker exec -i oracle-shard$shard_num sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < "$SQL_DIR/06-create-procedures.sql"
+    echo "✅ Procedures created on shard $shard_num"
+done
 
-echo "✅ Procedures created"
+echo ""
+
+# Insert Sample Data on Correct Shards
+echo "========================================="
+echo "Step 8: Inserting Sample Data on Shards"
+echo "========================================="
+
+echo "Inserting NA region data on Shard 1..."
+docker exec -i oracle-shard1 sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < "$SQL_DIR/05-insert-sample-data-na.sql"
+
+echo "Inserting EU region data on Shard 2..."
+docker exec -i oracle-shard2 sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < "$SQL_DIR/05-insert-sample-data-eu.sql"
+
+echo "Inserting APAC region data on Shard 3..."
+docker exec -i oracle-shard3 sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < "$SQL_DIR/05-insert-sample-data-apac.sql"
+
+echo "✅ Sample data inserted on all shards"
 echo ""
 
 echo "========================================="
@@ -149,16 +181,32 @@ echo "✅ Sharding Setup Complete!"
 echo "========================================="
 echo ""
 echo "Next steps:"
-echo "1. Run use case demonstrations:"
-echo "   docker exec -it oracle-catalog sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < sql/sharding/07-use-cases.sql"
-echo ""
-echo "2. Test queries:"
+echo "1. Query all shards via catalog (UNION ALL views):"
 echo "   docker exec -it oracle-catalog sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1"
+echo "   SELECT * FROM users_all;              # All users from all shards"
+echo "   SELECT * FROM accounts_all;           # All accounts from all shards"
+echo "   SELECT * FROM transactions_all;       # All transactions from all shards"
+echo "   SELECT * FROM account_summary_all;    # Accounts with user details"
+echo "   SELECT * FROM regional_stats;        # Aggregated stats by region"
 echo ""
-echo "3. Access web interface:"
-echo "   Catalog: https://localhost:5500/em"
-echo "   Shard 1:  https://localhost:5501/em"
-echo "   Shard 2:  https://localhost:5502/em"
-echo "   Shard 3:  https://localhost:5503/em"
+echo "2. Run example catalog queries:"
+echo "   docker exec -i oracle-catalog sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < sql/sharding/12-example-catalog-queries.sql"
+echo ""
+echo "3. Query data on specific shards (direct access):"
+echo "   docker exec -it oracle-shard1 sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1  # NA region data"
+echo "   docker exec -it oracle-shard2 sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1  # EU region data"
+echo "   docker exec -it oracle-shard3 sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1  # APAC region data"
+echo ""
+echo "4. View catalog metadata:"
+echo "   SELECT * FROM shard_routing_view;"
+echo ""
+echo "5. Access web interface:"
+echo "   Catalog: https://localhost:5500/em  (metadata + union views)"
+echo "   Shard 1:  https://localhost:5501/em (NA region data)"
+echo "   Shard 2:  https://localhost:5502/em (EU region data)"
+echo "   Shard 3:  https://localhost:5503/em (APAC region data)"
+echo ""
+echo "Note: Catalog contains metadata + UNION views to query all shards"
+echo "      Application data is stored on shards, but queryable via catalog views"
 echo ""
 

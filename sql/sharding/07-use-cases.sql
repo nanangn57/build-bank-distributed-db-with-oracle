@@ -18,6 +18,7 @@ PROMPT Demonstrates automatic routing to correct shard
 PROMPT ================================================
 
 -- Query account by ID - automatically routed to correct shard
+-- Get first account to demonstrate routing
 SELECT 
     'Query Account by ID' AS use_case,
     account_id,
@@ -26,7 +27,8 @@ SELECT
     region,
     status
 FROM accounts
-WHERE account_id = 5000000;
+WHERE ROWNUM <= 1
+ORDER BY account_id;
 
 PROMPT
 PROMPT ✅ Query automatically routed to correct shard based on account_id
@@ -39,16 +41,44 @@ PROMPT ================================================
 
 -- Transfer money between accounts on different shards
 -- Oracle Sharding automatically handles the distributed transaction
-PROMPT Transferring $250 from Account 5000000 (Shard 1) to Account 15000000 (Shard 2)...
-
-EXEC transfer_money(5000000, 15000000, 250.00, 'Cross-shard transfer demonstration');
-
--- Verify balances
-PROMPT Verifying balances after transfer...
-SELECT account_id, account_number, balance, region 
-FROM accounts 
-WHERE account_id IN (5000000, 15000000)
-ORDER BY account_id;
+-- Find accounts from different regions for cross-shard transfer
+DECLARE
+    v_from_account_id NUMBER;
+    v_to_account_id NUMBER;
+    v_from_region VARCHAR2(50);
+    v_to_region VARCHAR2(50);
+BEGIN
+    -- Get first NA account
+    SELECT MIN(account_id) INTO v_from_account_id 
+    FROM accounts 
+    WHERE region = 'NA' AND ROWNUM = 1;
+    
+    -- Get first EU account
+    SELECT MIN(account_id) INTO v_to_account_id 
+    FROM accounts 
+    WHERE region = 'EU' AND ROWNUM = 1;
+    
+    IF v_from_account_id IS NOT NULL AND v_to_account_id IS NOT NULL THEN
+        SELECT region INTO v_from_region FROM accounts WHERE account_id = v_from_account_id;
+        SELECT region INTO v_to_region FROM accounts WHERE account_id = v_to_account_id;
+        
+        DBMS_OUTPUT.PUT_LINE('Transferring $250 from Account ' || v_from_account_id || ' (' || v_from_region || ') to Account ' || v_to_account_id || ' (' || v_to_region || ')...');
+        
+        transfer_money(v_from_account_id, v_to_account_id, 250.00, 'Cross-shard transfer demonstration');
+        
+        -- Verify balances
+        DBMS_OUTPUT.PUT_LINE('Verifying balances after transfer...');
+        FOR rec IN (SELECT account_id, account_number, balance, region 
+                    FROM accounts 
+                    WHERE account_id IN (v_from_account_id, v_to_account_id)
+                    ORDER BY account_id) LOOP
+            DBMS_OUTPUT.PUT_LINE('Account ' || rec.account_id || ': ' || rec.balance || ' (' || rec.region || ')');
+        END LOOP;
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('Cannot find accounts from different regions for cross-shard transfer');
+    END IF;
+END;
+/
 
 PROMPT
 PROMPT ✅ Cross-shard transaction completed with ACID guarantees
@@ -77,27 +107,39 @@ PROMPT ✅ Query automatically aggregates data from all shards
 PROMPT
 
 PROMPT ================================================
-PROMPT Use Case 4: User's Accounts Across Shards
-PROMPT Demonstrates joining with duplicated user table
+PROMPT Use Case 4: User's Accounts (Same Shard)
+PROMPT Demonstrates accounts co-located with users
 PROMPT ================================================
 
--- Get all accounts for a user (may span multiple shards)
-SELECT 
-    'User Accounts Query' AS use_case,
-    a.account_id,
-    a.account_number,
-    a.account_type,
-    a.balance,
-    a.region,
-    u.username,
-    u.full_name
-FROM accounts a
-JOIN users u ON a.user_id = u.user_id
-WHERE u.user_id = 1
-ORDER BY a.created_date;
+-- Get all accounts for a user (all on same shard as user)
+-- Find first user and their accounts
+DECLARE
+    v_user_id NUMBER;
+BEGIN
+    SELECT MIN(user_id) INTO v_user_id FROM users;
+    
+    FOR rec IN (
+        SELECT 
+            'User Accounts Query' AS use_case,
+            a.account_id,
+            a.account_number,
+            a.account_type,
+            a.balance,
+            a.region,
+            u.username,
+            u.full_name
+        FROM accounts a
+        JOIN users u ON a.user_id = u.user_id
+        WHERE u.user_id = v_user_id
+        ORDER BY a.created_date
+    ) LOOP
+        DBMS_OUTPUT.PUT_LINE('Account: ' || rec.account_id || ' (' || rec.account_number || ') - ' || rec.account_type || ' - Balance: ' || rec.balance || ' - User: ' || rec.username);
+    END LOOP;
+END;
+/
 
 PROMPT
-PROMPT ✅ Join with duplicated users table works seamlessly
+PROMPT ✅ All accounts for a user are on the same shard (co-located)
 PROMPT
 
 PROMPT ================================================
@@ -106,20 +148,30 @@ PROMPT Demonstrates querying transactions across shards
 PROMPT ================================================
 
 -- Get transaction history for an account
--- Oracle automatically queries across shards if needed
-SELECT 
-    'Transaction History' AS use_case,
-    transaction_id,
-    from_account_id,
-    to_account_id,
-    transaction_type,
-    amount,
-    status,
-    transaction_date,
-    description
-FROM transactions
-WHERE from_account_id = 5000000 OR to_account_id = 5000000
-ORDER BY transaction_date DESC;
+-- Oracle automatically queries the correct shard based on account_id
+DECLARE
+    v_account_id NUMBER;
+BEGIN
+    SELECT MIN(account_id) INTO v_account_id FROM accounts;
+    
+    FOR rec IN (
+        SELECT 
+            transaction_id,
+            from_account_id,
+            to_account_id,
+            transaction_type,
+            amount,
+            status,
+            transaction_date,
+            description
+        FROM transactions
+        WHERE (from_account_id = v_account_id OR to_account_id = v_account_id)
+        ORDER BY transaction_date DESC
+    ) LOOP
+        DBMS_OUTPUT.PUT_LINE('Transaction: ' || rec.transaction_id || ' - Type: ' || rec.transaction_type || ' - Amount: ' || rec.amount || ' - Status: ' || rec.status);
+    END LOOP;
+END;
+/
 
 PROMPT
 PROMPT ✅ Transaction history queried across shards automatically
@@ -226,15 +278,27 @@ PROMPT Use Case 8: Account Balance Function
 PROMPT Demonstrates function calls that route to correct shard
 PROMPT ================================================
 
+-- Get account balances from different regions
 SELECT 
     'Account Balance Check' AS use_case,
     account_id,
     account_number,
     get_account_balance(account_id) AS balance,
     region
-FROM accounts
-WHERE account_id IN (1, 15000000, 25000000)
-ORDER BY account_id;
+FROM (
+    SELECT account_id, account_number, region 
+    FROM accounts 
+    WHERE region = 'NA' AND ROWNUM = 1
+    UNION ALL
+    SELECT account_id, account_number, region 
+    FROM accounts 
+    WHERE region = 'EU' AND ROWNUM = 1
+    UNION ALL
+    SELECT account_id, account_number, region 
+    FROM accounts 
+    WHERE region = 'APAC' AND ROWNUM = 1
+)
+ORDER BY region;
 
 PROMPT
 PROMPT ✅ Functions automatically route to correct shard

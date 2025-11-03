@@ -33,12 +33,20 @@ python3 app.py
 
 ## Configuration
 
+**IMPORTANT**: The dashboard MUST connect to the **CATALOG** database (oracle-catalog), not a shard!
+
+The union views (`users_all`, `accounts_all`, `transactions_all`) and dashboard views (`dashboard_overall_stats`, etc.) are located on the catalog database.
+
 The dashboard connects to Oracle database using environment variables:
-- `DB_HOST`: Database host (default: localhost)
-- `DB_PORT`: Database port (default: 1521)
+- `DB_HOST`: Database host - **MUST be catalog** (default: localhost, set to 'oracle-catalog' in Docker)
+- `DB_PORT`: Database port (default: 1521 - catalog port)
 - `DB_SERVICE_NAME`: Service name (default: FREEPDB1)
 - `DB_USER`: Database user (default: bank_app)
 - `DB_PASSWORD`: Database password (default: BankAppPass123)
+
+For Docker environments, the dashboard automatically connects to `oracle-catalog`.
+
+For local development, ensure `DB_HOST` points to the catalog database (typically `localhost:1521`).
 
 Or set these in a `.env` file in the project root.
 
