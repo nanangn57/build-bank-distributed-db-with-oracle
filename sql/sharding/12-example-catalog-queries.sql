@@ -3,11 +3,13 @@
 -- These queries demonstrate querying all shards via catalog
 
 PROMPT ====================================
-PROMPT Example Queries via Catalog Union Views
-PROMPT Query all shards through oracle-catalog
+PROMPT Example Catalog Queries (UNION Views)
 PROMPT ====================================
 
-CONNECT bank_app/BankAppPass123@FREEPDB1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+
+CONNECT bank_app/BankAppPass123@freepdb1
 
 PROMPT
 PROMPT ====================================

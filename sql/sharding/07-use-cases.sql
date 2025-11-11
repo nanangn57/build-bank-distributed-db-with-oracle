@@ -2,11 +2,14 @@
 -- These showcase distributed database features
 -- Run as bank_app user
 
-PROMPT ================================================
-PROMPT Use Case Demonstrations - Oracle Sharding
-PROMPT ================================================
+PROMPT ====================================
+PROMPT Sharding Use Cases (Run on Catalog)
+PROMPT ====================================
 
-CONNECT bank_app/BankAppPass123@FREEPDB1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+
+CONNECT bank_app/BankAppPass123@freepdb1
 
 -- Enable output for procedures
 SET SERVEROUTPUT ON;

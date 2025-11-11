@@ -3,10 +3,13 @@
 -- Includes cross-shard transaction handling
 
 PROMPT ====================================
-PROMPT Creating Transaction Procedures
+PROMPT Creating Stored Procedures for Transactions
 PROMPT ====================================
 
-CONNECT bank_app/BankAppPass123@FREEPDB1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+
+CONNECT bank_app/BankAppPass123@freepdb1
 
 -- Function to determine which shard a user_id belongs to based on ID range
 CREATE OR REPLACE FUNCTION get_user_shard(p_user_id NUMBER) RETURN VARCHAR2 AS

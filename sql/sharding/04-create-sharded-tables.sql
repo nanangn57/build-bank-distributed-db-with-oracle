@@ -9,7 +9,10 @@ PROMPT Note: Run this script on EACH SHARD, not on catalog
 PROMPT Catalog database should only contain metadata, not application data
 PROMPT ====================================
 
-CONNECT bank_app/BankAppPass123@FREEPDB1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+
+CONNECT bank_app/BankAppPass123@freepdb1
 
 PROMPT Creating Users Table (Sharded by region)...
 

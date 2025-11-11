@@ -7,7 +7,10 @@ PROMPT Creating Database Links to Shards
 PROMPT This allows catalog to query data from all shards
 PROMPT ====================================
 
-CONNECT bank_app/BankAppPass123@FREEPDB1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+
+CONNECT bank_app/BankAppPass123@freepdb1
 
 -- Create database links to each shard
 -- These links allow the catalog to access data on shards
@@ -33,7 +36,7 @@ CONNECT TO bank_app
 IDENTIFIED BY BankAppPass123
 USING '(DESCRIPTION=
     (ADDRESS=(PROTOCOL=TCP)(HOST=oracle-shard1)(PORT=1521))
-    (CONNECT_DATA=(SERVICE_NAME=FREEPDB1))
+    (CONNECT_DATA=(SERVICE_NAME=freepdb1))
 )';
 
 PROMPT Creating database link to Shard 2 (EU region)...
@@ -57,7 +60,7 @@ CONNECT TO bank_app
 IDENTIFIED BY BankAppPass123
 USING '(DESCRIPTION=
     (ADDRESS=(PROTOCOL=TCP)(HOST=oracle-shard2)(PORT=1521))
-    (CONNECT_DATA=(SERVICE_NAME=FREEPDB1))
+    (CONNECT_DATA=(SERVICE_NAME=freepdb1))
 )';
 
 PROMPT Creating database link to Shard 3 (APAC region)...
@@ -81,7 +84,7 @@ CONNECT TO bank_app
 IDENTIFIED BY BankAppPass123
 USING '(DESCRIPTION=
     (ADDRESS=(PROTOCOL=TCP)(HOST=oracle-shard3)(PORT=1521))
-    (CONNECT_DATA=(SERVICE_NAME=FREEPDB1))
+    (CONNECT_DATA=(SERVICE_NAME=freepdb1))
 )';
 
 COMMIT;
@@ -91,9 +94,9 @@ PROMPT Testing database links...
 SET SERVEROUTPUT ON;
 
 -- Test database links with error handling
+DECLARE
+    v_test VARCHAR2(100);
 BEGIN
-    DECLARE
-        v_test VARCHAR2(100);
     BEGIN
         SELECT 'Shard 1 connected' INTO v_test FROM DUAL@shard1_link;
         DBMS_OUTPUT.PUT_LINE('✅ Shard 1 link: Connected successfully');

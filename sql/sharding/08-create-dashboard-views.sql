@@ -5,7 +5,10 @@ PROMPT ====================================
 PROMPT Creating Dashboard Views
 PROMPT ====================================
 
-CONNECT bank_app/BankAppPass123@FREEPDB1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+
+CONNECT bank_app/BankAppPass123@freepdb1
 
 -- View for regional statistics
 -- Uses union views to query data from all shards

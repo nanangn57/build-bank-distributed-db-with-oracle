@@ -18,35 +18,51 @@
 
 ## Deployment Steps
 
-### 1. Setup Catalog (Metadata Only)
+### 1. Run Full Pipeline (Recommended)
 ```bash
-# Create metadata tables on catalog
-docker exec -i oracle-catalog sqlplus bank_app/BankAppPass123@FREEPDB1 < sql/sharding/09-create-catalog-metadata.sql
+./scripts/setup-sharding.sh
+```
+This script performs all steps automatically:
+1. Verify containers are running
+2. Enable basic sharding settings on catalog + shards
+3. Create users (`shard_catalog`, `bank_app`)
+4. Create metadata tables on catalog
+5. Grant `CREATE DATABASE LINK` to `bank_app`
+6. Create database links from catalog to each shard
+7. Create tables, procedures, and load sample data on each shard
+8. Create catalog UNION views and dashboard views
+
+### 2. Manual Steps (if you need to run individually)
+
+#### Catalog metadata + connectivity
+```bash
+docker exec -i oracle-catalog sqlplus bank_app/BankAppPass123@freepdb1 < sql/sharding/09-create-catalog-metadata.sql
+docker exec -i oracle-catalog sqlplus sys/tuPDqNJWLr7QcA@freepdb1 as sysdba <<'EOF'
+GRANT CREATE DATABASE LINK TO bank_app;
+EXIT;
+EOF
+docker exec -i oracle-catalog sqlplus bank_app/BankAppPass123@freepdb1 < sql/sharding/10-create-catalog-database-links.sql
 ```
 
-### 2. Setup Each Shard
+#### Shard schema + logic
 ```bash
-# Create tables on each shard
-docker exec -i oracle-shard1 sqlplus bank_app/BankAppPass123@FREEPDB1 < sql/sharding/04-create-sharded-tables.sql
-docker exec -i oracle-shard2 sqlplus bank_app/BankAppPass123@FREEPDB1 < sql/sharding/04-create-sharded-tables.sql
-docker exec -i oracle-shard3 sqlplus bank_app/BankAppPass123@FREEPDB1 < sql/sharding/04-create-sharded-tables.sql
-
-# Create procedures on each shard
-docker exec -i oracle-shard1 sqlplus bank_app/BankAppPass123@FREEPDB1 < sql/sharding/06-create-procedures.sql
-docker exec -i oracle-shard2 sqlplus bank_app/BankAppPass123@FREEPDB1 < sql/sharding/06-create-procedures.sql
-docker exec -i oracle-shard3 sqlplus bank_app/BankAppPass123@FREEPDB1 < sql/sharding/06-create-procedures.sql
+for shard in 1 2 3; do
+  docker exec -i oracle-shard$shard sqlplus bank_app/BankAppPass123@freepdb1 < sql/sharding/04-create-sharded-tables.sql
+  docker exec -i oracle-shard$shard sqlplus bank_app/BankAppPass123@freepdb1 < sql/sharding/06-create-procedures.sql
+done
 ```
 
-### 3. Insert Data to Correct Shards
+#### Load sample data
 ```bash
-# Insert NA region data on Shard 1
-docker exec -i oracle-shard1 sqlplus bank_app/BankAppPass123@FREEPDB1 < sql/sharding/05-insert-sample-data-na.sql
+docker exec -i oracle-shard1 sqlplus bank_app/BankAppPass123@freepdb1 < sql/sharding/05-insert-sample-data-na.sql
+docker exec -i oracle-shard2 sqlplus bank_app/BankAppPass123@freepdb1 < sql/sharding/05-insert-sample-data-eu.sql
+docker exec -i oracle-shard3 sqlplus bank_app/BankAppPass123@freepdb1 < sql/sharding/05-insert-sample-data-apac.sql
+```
 
-# Insert EU region data on Shard 2
-docker exec -i oracle-shard2 sqlplus bank_app/BankAppPass123@FREEPDB1 < sql/sharding/05-insert-sample-data-eu.sql
-
-# Insert APAC region data on Shard 3
-docker exec -i oracle-shard3 sqlplus bank_app/BankAppPass123@FREEPDB1 < sql/sharding/05-insert-sample-data-apac.sql
+#### Expose catalog views
+```bash
+docker exec -i oracle-catalog sqlplus bank_app/BankAppPass123@freepdb1 < sql/sharding/11-create-catalog-union-views.sql
+docker exec -i oracle-catalog sqlplus bank_app/BankAppPass123@freepdb1 < sql/sharding/08-create-dashboard-views.sql
 ```
 
 ## Data Routing Rules
@@ -73,7 +89,7 @@ The catalog provides UNION ALL views that aggregate data from all shards:
 
 ```bash
 # Connect to catalog
-docker exec -it oracle-catalog sqlplus bank_app/BankAppPass123@FREEPDB1
+docker exec -it oracle-catalog sqlplus bank_app/BankAppPass123@freepdb1
 
 # Query all users from all shards
 SELECT * FROM users_all;
@@ -102,19 +118,19 @@ SELECT username, email, region, shard_location FROM users_all ORDER BY user_id;
 ### Query on Specific Shard (Direct Access)
 ```bash
 # Query NA region data on Shard 1
-docker exec -it oracle-shard1 sqlplus bank_app/BankAppPass123@FREEPDB1
+docker exec -it oracle-shard1 sqlplus bank_app/BankAppPass123@freepdb1
 SELECT * FROM users WHERE region = 'NA';
 SELECT * FROM accounts WHERE region = 'NA';
 
 # Query EU region data on Shard 2
-docker exec -it oracle-shard2 sqlplus bank_app/BankAppPass123@FREEPDB1
+docker exec -it oracle-shard2 sqlplus bank_app/BankAppPass123@freepdb1
 SELECT * FROM users WHERE region = 'EU';
 ```
 
 ### Query Catalog Metadata
 ```bash
 # View shard routing information
-docker exec -it oracle-catalog sqlplus bank_app/BankAppPass123@FREEPDB1
+docker exec -it oracle-catalog sqlplus bank_app/BankAppPass123@freepdb1
 SELECT * FROM shard_routing_view;
 SELECT get_shard_for_user(5000000) FROM DUAL;  -- Returns 1 (Shard 1)
 SELECT get_shard_for_region('NA') FROM DUAL;    -- Returns 1 (Shard 1)

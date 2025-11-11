@@ -29,7 +29,7 @@ fi
 echo "Executing use case demonstrations..."
 echo ""
 
-docker exec -i oracle-catalog sqlplus bank_app/${BANK_APP_PASSWORD}@FREEPDB1 < "$SQL_FILE"
+docker exec -i oracle-catalog sqlplus bank_app/${BANK_APP_PASSWORD}@freepdb1 < "$SQL_FILE"
 
 echo ""
 echo "========================================="

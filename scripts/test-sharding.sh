@@ -41,7 +41,7 @@ echo "Test 2: Testing database connections..."
 test_connection() {
     local container=$1
     if docker exec $container sqlplus -s /nolog <<EOF > /dev/null 2>&1
-connect sys/${ORACLE_PWD}@FREEPDB1 as sysdba
+connect sys/${ORACLE_PWD}@freepdb1 as sysdba
 SELECT 'CONNECTED' FROM DUAL;
 EXIT;
 EOF
@@ -62,7 +62,7 @@ echo ""
 
 # Test 3: Check sharded tables exist
 echo "Test 3: Checking sharded tables..."
-if docker exec oracle-catalog sqlplus -s bank_app/${BANK_APP_PASSWORD}@FREEPDB1 <<EOF | grep -q "USERS\|ACCOUNTS\|TRANSACTIONS"
+if docker exec oracle-catalog sqlplus -s bank_app/${BANK_APP_PASSWORD}@freepdb1 <<EOF | grep -q "USERS\|ACCOUNTS\|TRANSACTIONS"
 SELECT table_name FROM user_tables WHERE table_name IN ('USERS', 'ACCOUNTS', 'TRANSACTIONS');
 EXIT;
 EOF
@@ -78,7 +78,7 @@ echo ""
 echo "Test 4: Testing sharded queries..."
 
 echo "Querying accounts table..."
-docker exec oracle-catalog sqlplus -s bank_app/${BANK_APP_PASSWORD}@FREEPDB1 <<EOF
+docker exec -i oracle-catalog sqlplus bank_app/${BANK_APP_PASSWORD}@freepdb1 <<'EOF'
 SET PAGESIZE 20
 SELECT COUNT(*) AS account_count FROM accounts;
 SELECT region, COUNT(*) AS count, SUM(balance) AS total_balance 

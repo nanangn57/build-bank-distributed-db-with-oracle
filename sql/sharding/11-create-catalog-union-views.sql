@@ -7,7 +7,10 @@ PROMPT Creating Union Views for Cross-Shard Queries
 PROMPT Query these views from catalog to get data from all shards
 PROMPT ====================================
 
-CONNECT bank_app/BankAppPass123@FREEPDB1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+
+CONNECT bank_app/BankAppPass123@freepdb1
 
 -- View that UNION ALL users from all shards
 CREATE OR REPLACE VIEW users_all AS
@@ -73,16 +76,18 @@ PROMPT Created view: account_summary_all (Accounts with user details from all sh
 -- View for regional statistics
 CREATE OR REPLACE VIEW regional_stats AS
 SELECT 
-    region,
-    COUNT(DISTINCT user_id) AS user_count,
-    COUNT(DISTINCT account_id) AS account_count,
-    COUNT(DISTINCT transaction_id) AS transaction_count,
-    SUM(balance) AS total_balance,
-    ROUND(AVG(balance), 2) AS avg_balance,
-    MIN(balance) AS min_balance,
-    MAX(balance) AS max_balance
-FROM accounts_all
-GROUP BY region;
+    a.region,
+    COUNT(DISTINCT a.user_id) AS user_count,
+    COUNT(DISTINCT a.account_id) AS account_count,
+    COUNT(DISTINCT t.transaction_id) AS transaction_count,
+    SUM(a.balance) AS total_balance,
+    ROUND(AVG(a.balance), 2) AS avg_balance,
+    MIN(a.balance) AS min_balance,
+    MAX(a.balance) AS max_balance
+FROM accounts_all a
+LEFT JOIN transactions_all t
+  ON a.account_id = t.from_account_id OR a.account_id = t.to_account_id
+GROUP BY a.region;
 
 PROMPT Created view: regional_stats (Aggregated statistics by region)
 

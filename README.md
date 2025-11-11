@@ -32,9 +32,9 @@ This project implements Oracle Sharding for a bank transaction system, demonstra
 
 ### Table Distribution Strategy
 
-1. **Users Table**: DUPLICATED across all shards (for local joins)
-2. **Accounts Table**: SHARDED by `account_id` using consistent hash
-3. **Transactions Table**: SHARDED and co-located with accounts (stored on same shard as source account)
+1. **Users Table**: SHARDED by region-based `user_id` ranges (NA/EU/APAC)
+2. **Accounts Table**: SHARDED and co-located with the owning user (same shard/region)
+3. **Transactions Table**: SHARDED and co-located with the source account (`from_account_id`)
 
 ### Shard Distribution
 
@@ -90,13 +90,26 @@ docker-compose -f docker-compose-sharding.yml logs -f
 ./scripts/setup-sharding.sh
 ```
 
+After the script finishes, verify that catalog views exist:
+```bash
+docker exec -i oracle-catalog sqlplus bank_app/BankAppPass123@freepdb1 <<'EOF'
+SELECT view_name FROM user_views
+WHERE view_name IN (
+  'USERS_ALL','ACCOUNTS_ALL','TRANSACTIONS_ALL',
+  'DASHBOARD_OVERALL_STATS','DASHBOARD_REGIONAL_STATS');
+EXIT;
+EOF
+```
+
 This script will:
-- Enable sharding on all databases
-- Create shard catalog user
-- Create bank application user
-- Create sharded tables
-- Insert sample data
-- Create stored procedures
+- Enable sharding-related session settings on catalog and shards
+- Create/refresh shard catalog & bank application users
+- Create catalog metadata tables and shard routing functions
+- Ensure `bank_app` has `CREATE DATABASE LINK` and establish DB links to each shard
+- Create sharded tables, sequences, triggers, and procedures on every shard
+- Load region-specific sample data on the appropriate shard
+- Create catalog UNION views (`users_all`, `accounts_all`, `transactions_all`, …)
+- Create dashboard views (`dashboard_*`) for the Flask app
 
 ### 5. Test Sharding
 
@@ -106,6 +119,16 @@ This script will:
 
 # Run use case demonstrations
 ./scripts/run-use-cases.sh
+```
+
+### 6. Reset Environment (clean rebuild)
+
+```bash
+./docker/stop-sharding.sh
+docker-compose -f docker-compose-sharding.yml down -v
+./docker/start-sharding.sh
+# wait for databases to finish booting (2–5 minutes)
+./scripts/setup-sharding.sh
 ```
 
 ## Use Cases Demonstrated
@@ -154,13 +177,20 @@ build-bank-distributed-db-with-oracle/
 │   └── ...
 ├── sql/
 │   └── sharding/
-│       ├── 01-enable-sharding.sql          # Enable sharding
-│       ├── 02-create-shard-catalog-user.sql # Catalog user
-│       ├── 03-create-bank-app-user.sql      # Application user
-│       ├── 04-create-sharded-tables.sql     # Sharded tables
-│       ├── 05-insert-sample-data.sql       # Sample data
-│       ├── 06-create-procedures.sql        # Stored procedures
-│       └── 07-use-cases.sql                # Use case demos
+│       ├── 01-enable-sharding.sql          # Session settings for sharding (compat layer)
+│       ├── 02-create-shard-catalog-user.sql # Catalog user + grants
+│       ├── 03-create-bank-app-user.sql      # Application user + tablespace setup
+│       ├── 04-create-sharded-tables.sql     # Tables, sequences, triggers on each shard
+│       ├── 05-insert-sample-data-na.sql     # NA sample data (shard1)
+│       ├── 05-insert-sample-data-eu.sql     # EU sample data (shard2)
+│       ├── 05-insert-sample-data-apac.sql   # APAC sample data (shard3)
+│       ├── 06-create-procedures.sql         # Stored procedures/functions
+│       ├── 07-use-cases.sql                 # Demo queries/workflows
+│       ├── 08-create-dashboard-views.sql    # Dashboard-specific views on catalog
+│       ├── 09-create-catalog-metadata.sql   # Routing metadata & helper functions
+│       ├── 10-create-catalog-database-links.sql # DB links from catalog -> shards
+│       ├── 11-create-catalog-union-views.sql    # UNION ALL views (users_all, etc.)
+│       └── 12-example-catalog-queries.sql   # Example catalog queries
 ├── scripts/
 │   ├── setup-sharding.sh          # Complete setup script
 │   ├── test-sharding.sh           # Test sharding setup
@@ -263,13 +293,13 @@ Login:
 
 ```bash
 # Connect to catalog
-docker exec -it oracle-catalog sqlplus bank_app/BankAppPass123@FREEPDB1
+docker exec -it oracle-catalog sqlplus bank_app/BankAppPass123@freepdb1
 
 # Connect to shard 1
-docker exec -it oracle-shard1 sqlplus bank_app/BankAppPass123@FREEPDB1
+docker exec -it oracle-shard1 sqlplus bank_app/BankAppPass123@freepdb1
 
 # Connect as sys
-docker exec -it oracle-catalog sqlplus sys/tuPDqNJWLr7QcA@FREEPDB1 as sysdba
+docker exec -it oracle-catalog sqlplus sys/tuPDqNJWLr7QcA@freepdb1 as sysdba
 ```
 
 ## Stored Procedures
@@ -341,9 +371,9 @@ docker-compose -f docker-compose-sharding.yml down -v
 
 ### Sharding Setup Fails
 - Ensure all databases are fully initialized before running setup
-- Check that sharding packages are available (DBMS_GSM_*)
-- Verify network connectivity between containers
-- Check container logs for errors
+- Confirm `bank_app` has `CREATE DATABASE LINK` on the catalog (`GRANT CREATE DATABASE LINK TO bank_app;` as SYS)
+- If union views fail with `ORA-00942`, ensure shard tables/data were created before rerunning catalog view scripts
+- Check container logs for detailed errors
 
 ### ARM Mac Issues
 - Oracle Database runs via x86_64 emulation on ARM Macs
