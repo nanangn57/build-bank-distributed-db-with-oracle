@@ -340,14 +340,15 @@ def get_users():
     try:
         cursor = conn.cursor()
         # Use users_all view which unions data from all shards via catalog
-        cursor.execute("SELECT user_id, username, full_name FROM users_all ORDER BY username")
+        cursor.execute("SELECT user_id, username, full_name, region FROM users_all ORDER BY username")
         
         results = []
         for row in cursor.fetchall():
             results.append({
                 'user_id': row[0],
                 'username': row[1],
-                'full_name': row[2]
+                'full_name': row[2],
+                'region': row[3]
             })
         
         cursor.close()
