@@ -7,7 +7,10 @@ PROMPT Creating Catalog Metadata Tables
 PROMPT Note: Catalog database stores metadata only, not application data
 PROMPT ====================================
 
-CONNECT bank_app/BankAppPass123@FREEPDB1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+
+CONNECT bank_app/BankAppPass123@freepdb1
 
 -- Shard routing metadata table
 -- This table tracks which shard handles which user_id ranges

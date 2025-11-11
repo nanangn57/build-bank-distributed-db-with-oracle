@@ -3,11 +3,16 @@
 -- This file inserts sample data for Europe region
 -- User IDs will be auto-generated in range 10,000,001 - 20,000,000
 
+SET SERVEROUTPUT ON
+
 PROMPT ====================================
 PROMPT Inserting Sample Data for EU Region (Shard 2)
 PROMPT ====================================
 
-CONNECT bank_app/BankAppPass123@FREEPDB1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+
+CONNECT bank_app/BankAppPass123@freepdb1
 
 PROMPT Inserting EU region users (user_id auto-generated: 10M-20M)...
 
@@ -59,29 +64,29 @@ BEGIN
     
     -- Insert accounts for jane_smith
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user1_id, 'ACC-EU-001', 'CHECKING', 7500.00, 'GBP', 'EU');
+    VALUES (v_user1_id, 'ACC008', 'CHECKING', 7500.00, 'GBP', 'EU');
     
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user1_id, 'ACC-EU-002', 'SAVINGS', 30000.00, 'GBP', 'EU');
+    VALUES (v_user1_id, 'ACC009', 'SAVINGS', 30000.00, 'GBP', 'EU');
     
     -- Insert accounts for pierre_dupont
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user2_id, 'ACC-EU-003', 'CHECKING', 8500.00, 'EUR', 'EU');
+    VALUES (v_user2_id, 'ACC010', 'CHECKING', 8500.00, 'EUR', 'EU');
     
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user2_id, 'ACC-EU-004', 'SAVINGS', 55000.00, 'EUR', 'EU');
+    VALUES (v_user2_id, 'ACC011', 'SAVINGS', 55000.00, 'EUR', 'EU');
     
     -- Insert accounts for hans_mueller
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user3_id, 'ACC-EU-005', 'CHECKING', 9200.00, 'EUR', 'EU');
+    VALUES (v_user3_id, 'ACC012', 'CHECKING', 9200.00, 'EUR', 'EU');
     
     -- Insert accounts for sophia_rossi
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user4_id, 'ACC-EU-006', 'SAVINGS', 68000.00, 'EUR', 'EU');
+    VALUES (v_user4_id, 'ACC013', 'SAVINGS', 68000.00, 'EUR', 'EU');
     
     -- Insert accounts for carlos_rodriguez
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user5_id, 'ACC-EU-007', 'CHECKING', 6200.00, 'EUR', 'EU');
+    VALUES (v_user5_id, 'ACC014', 'CHECKING', 6200.00, 'EUR', 'EU');
     
     COMMIT;
     
@@ -90,12 +95,12 @@ BEGIN
     SELECT MIN(account_id) INTO v_acc2_id FROM accounts WHERE user_id = v_user2_id;
     SELECT MIN(account_id) INTO v_acc3_id FROM accounts WHERE user_id = v_user3_id;
     
-    PROMPT Inserting sample transactions...
+    DBMS_OUTPUT.PUT_LINE('Inserting sample transactions for EU accounts...');
     
     -- Insert sample transactions for EU accounts
     -- Transactions are co-located with accounts on same shard
     
-    -- Deposit for jane_smith's checking account
+    -- Deposit for jane_smith''s checking account
     INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
     VALUES (NULL, v_acc1_id, 'DEPOSIT', 7500.00, 'GBP', 'COMPLETED', 'Initial deposit');
     

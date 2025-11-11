@@ -3,11 +3,16 @@
 -- This file inserts sample data for North America region
 -- User IDs will be auto-generated in range 1 - 10,000,000
 
+SET SERVEROUTPUT ON
+
 PROMPT ====================================
 PROMPT Inserting Sample Data for NA Region (Shard 1)
 PROMPT ====================================
 
-CONNECT bank_app/BankAppPass123@FREEPDB1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+
+CONNECT bank_app/BankAppPass123@freepdb1
 
 PROMPT Inserting NA region users (user_id auto-generated: 1-10M)...
 
@@ -59,29 +64,29 @@ BEGIN
     
     -- Insert accounts for john_doe
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user1_id, 'ACC-NA-001', 'CHECKING', 5000.00, 'USD', 'NA');
+    VALUES (v_user1_id, 'ACC001', 'CHECKING', 5000.00, 'USD', 'NA');
     
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user1_id, 'ACC-NA-002', 'SAVINGS', 25000.00, 'USD', 'NA');
+    VALUES (v_user1_id, 'ACC002', 'SAVINGS', 25000.00, 'USD', 'NA');
     
     -- Insert accounts for maria_garcia
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user2_id, 'ACC-NA-003', 'CHECKING', 3500.00, 'USD', 'NA');
+    VALUES (v_user2_id, 'ACC003', 'CHECKING', 3500.00, 'USD', 'NA');
     
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user2_id, 'ACC-NA-004', 'SAVINGS', 45000.00, 'USD', 'NA');
+    VALUES (v_user2_id, 'ACC004', 'SAVINGS', 45000.00, 'USD', 'NA');
     
     -- Insert accounts for robert_smith
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user3_id, 'ACC-NA-005', 'CHECKING', 12000.00, 'USD', 'NA');
+    VALUES (v_user3_id, 'ACC005', 'CHECKING', 12000.00, 'USD', 'NA');
     
     -- Insert accounts for jennifer_wilson
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user4_id, 'ACC-NA-006', 'SAVINGS', 80000.00, 'USD', 'NA');
+    VALUES (v_user4_id, 'ACC006', 'SAVINGS', 80000.00, 'USD', 'NA');
     
     -- Insert accounts for david_brown
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user5_id, 'ACC-NA-007', 'CHECKING', 7500.00, 'USD', 'NA');
+    VALUES (v_user5_id, 'ACC007', 'CHECKING', 7500.00, 'USD', 'NA');
     
     COMMIT;
     
@@ -90,12 +95,12 @@ BEGIN
     SELECT MIN(account_id) INTO v_acc2_id FROM accounts WHERE user_id = v_user2_id;
     SELECT MIN(account_id) INTO v_acc3_id FROM accounts WHERE user_id = v_user3_id;
     
-    PROMPT Inserting sample transactions...
+    DBMS_OUTPUT.PUT_LINE('Inserting sample transactions for NA accounts...');
     
     -- Insert sample transactions for NA accounts
     -- Transactions are co-located with accounts on same shard
     
-    -- Deposit for john_doe's checking account
+    -- Deposit for john_doe''s checking account
     INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
     VALUES (NULL, v_acc1_id, 'DEPOSIT', 5000.00, 'USD', 'COMPLETED', 'Initial deposit');
     

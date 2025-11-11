@@ -11,11 +11,17 @@ except ImportError:
     # Fallback to cx_Oracle if oracledb not available
     import cx_Oracle as oracledb
 
+# Normalize service name (Oracle service names are case-sensitive)
+_default_service = os.getenv('DB_SERVICE_NAME', 'freepdb1')
+if _default_service:
+    _default_service = _default_service.strip()
+service_normalized = _default_service.lower()
+
 # Database configuration
 DB_CONFIG = {
     'host': os.getenv('DB_HOST', 'localhost'),
     'port': os.getenv('DB_PORT', '1521'),
-    'service_name': os.getenv('DB_SERVICE_NAME', 'FREEPDB1'),
+    'service_name': service_normalized,
     'user': os.getenv('DB_USER', 'bank_app'),
     'password': os.getenv('DB_PASSWORD', 'BankAppPass123')
 }
