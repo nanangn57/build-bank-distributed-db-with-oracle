@@ -385,20 +385,16 @@
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Region *</label>
-                            <select name="region" required>
-                                <option value="NA">North America</option>
-                                <option value="EU">Europe</option>
-                                <option value="APAC">Asia Pacific</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
                             <label>Currency</label>
                             <select name="currency">
                                 <option value="USD">USD</option>
                                 <option value="EUR">EUR</option>
                                 <option value="JPY">JPY</option>
                             </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Region</label>
+                            <input type="text" id="accountRegionDisplay" value="Auto-detected from user" readonly style="background: #f5f5f5; color: #666;">
                         </div>
                     </div>
                     <button type="submit" class="btn btn-success">Insert Account</button>
@@ -476,6 +472,8 @@
     <script>
         let refreshInterval = null;
         let refreshTime = 5000;
+        let accountsCache = [];
+        let usersCache = [];
         
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', function() {
@@ -483,6 +481,10 @@
             loadAccounts();
             refreshDashboard();
             setupAutoRefresh();
+            const userSelect = document.getElementById('userSelect');
+            if (userSelect) {
+                userSelect.addEventListener('change', updateAccountRegionHint);
+            }
         });
         
         function setupAutoRefresh() {
@@ -638,6 +640,7 @@
             try {
                 const response = await fetch('/api/accounts');
                 const data = await response.json();
+                accountsCache = Array.isArray(data) ? data : [];
                 
                 if (data.error) {
                     document.getElementById('accountsList').innerHTML = 
@@ -721,19 +724,25 @@
             try {
                 const response = await fetch('/api/users');
                 const data = await response.json();
+                usersCache = Array.isArray(data) ? data : [];
                 
                 const select = document.getElementById('userSelect');
                 select.innerHTML = '<option value="">Select User</option>';
-                data.forEach(user => {
+                usersCache.forEach(user => {
                     const option = document.createElement('option');
                     // API returns lowercase field names
                     const userId = user.user_id;
                     const username = user.username;
                     const fullName = user.full_name || '';
                     option.value = userId;
-                    option.textContent = `${username} - ${fullName}`;
+                    const region = user.region || '';
+                    option.textContent = `${username} - ${fullName}${region ? ' [' + region + ']' : ''}`;
+                    if (region) {
+                        option.dataset.region = region;
+                    }
                     select.appendChild(option);
                 });
+                updateAccountRegionHint();
             } catch (error) {
                 console.error('Error loading users:', error);
             }
@@ -806,6 +815,14 @@
             const formData = new FormData(event.target);
             const data = Object.fromEntries(formData);
             data.balance = parseFloat(data.balance);
+            const accountNumber = (data.account_number || '').trim();
+            if (accountsCache.some(acc => {
+                const existing = acc.account_number || acc.ACCOUNT_NUMBER || '';
+                return existing.toUpperCase() === accountNumber.toUpperCase();
+            })) {
+                showMessage('Account number already exists. Please use a unique account number.', 'error');
+                return;
+            }
             
             try {
                 const response = await fetch('/api/insert/account', {
@@ -936,6 +953,24 @@
             // Show selected tab
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
+        }
+        
+        function updateAccountRegionHint() {
+            const display = document.getElementById('accountRegionDisplay');
+            if (!display) return;
+            const select = document.getElementById('userSelect');
+            const selected = select ? select.value : '';
+            if (!selected) {
+                display.value = 'Auto-detected from user';
+                return;
+            }
+            const user = usersCache.find(u => String(u.user_id || u.USER_ID) === String(selected));
+            const region = user ? (user.region || user.REGION || '').toString() : '';
+            if (region) {
+                display.value = `Auto-detected: ${region}`;
+            } else {
+                display.value = 'Auto-detected from user';
+            }
         }
         
         function showMessage(message, type) {
