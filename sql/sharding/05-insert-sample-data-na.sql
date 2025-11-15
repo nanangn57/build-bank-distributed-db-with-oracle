@@ -51,9 +51,6 @@ DECLARE
     v_user3_id NUMBER;  -- robert_smith
     v_user4_id NUMBER;  -- jennifer_wilson
     v_user5_id NUMBER;  -- david_brown
-    v_acc1_id NUMBER;
-    v_acc2_id NUMBER;
-    v_acc3_id NUMBER;
 BEGIN
     -- Get user IDs that were auto-generated
     SELECT user_id INTO v_user1_id FROM users WHERE username = 'john_doe' AND region = 'NA';
@@ -90,35 +87,27 @@ BEGIN
     
     COMMIT;
     
-    -- Get account IDs for transactions
-    SELECT MIN(account_id) INTO v_acc1_id FROM accounts WHERE user_id = v_user1_id;
-    SELECT MIN(account_id) INTO v_acc2_id FROM accounts WHERE user_id = v_user2_id;
-    SELECT MIN(account_id) INTO v_acc3_id FROM accounts WHERE user_id = v_user3_id;
-    
     DBMS_OUTPUT.PUT_LINE('Inserting sample transactions for NA accounts...');
     
     -- Insert sample transactions for NA accounts
     -- Transactions are co-located with accounts on same shard
+    -- Using account_number directly (ACC001, ACC002, etc.)
     
-    -- Deposit for john_doe''s checking account
-    INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
-    VALUES (NULL, v_acc1_id, 'DEPOSIT', 5000.00, 'USD', 'COMPLETED', 'Initial deposit');
+    -- Deposit for john_doe's checking account (ACC001)
+    INSERT INTO transactions (account_number, from_account_number, to_account_number, transaction_type, amount, currency, status, description)
+    VALUES ('ACC001', NULL, 'ACC001', 'DEPOSIT', 5000.00, 'USD', 'COMPLETED', 'Initial deposit');
     
-    -- Transfer from checking to savings
-    SELECT MAX(account_id) INTO v_acc1_id FROM accounts WHERE user_id = v_user1_id AND account_type = 'SAVINGS';
-    SELECT MIN(account_id) INTO v_acc2_id FROM accounts WHERE user_id = v_user1_id AND account_type = 'CHECKING';
-    INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
-    VALUES (v_acc2_id, v_acc1_id, 'TRANSFER', 2000.00, 'USD', 'COMPLETED', 'Transfer to savings');
+    -- Transfer from checking (ACC001) to savings (ACC002)
+    INSERT INTO transactions (account_number, from_account_number, to_account_number, transaction_type, amount, currency, status, description)
+    VALUES ('ACC001', 'ACC001', 'ACC002', 'TRANSFER', 2000.00, 'USD', 'COMPLETED', 'Transfer to savings');
     
-    -- Deposit for maria_garcia
-    SELECT MIN(account_id) INTO v_acc1_id FROM accounts WHERE user_id = v_user2_id;
-    INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
-    VALUES (NULL, v_acc1_id, 'DEPOSIT', 3500.00, 'USD', 'COMPLETED', 'Initial deposit');
+    -- Deposit for maria_garcia's checking account (ACC003)
+    INSERT INTO transactions (account_number, from_account_number, to_account_number, transaction_type, amount, currency, status, description)
+    VALUES ('ACC003', NULL, 'ACC003', 'DEPOSIT', 3500.00, 'USD', 'COMPLETED', 'Initial deposit');
     
-    -- Withdrawal for robert_smith
-    SELECT MIN(account_id) INTO v_acc1_id FROM accounts WHERE user_id = v_user3_id;
-    INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
-    VALUES (v_acc1_id, NULL, 'WITHDRAWAL', 500.00, 'USD', 'COMPLETED', 'ATM withdrawal');
+    -- Withdrawal for robert_smith's checking account (ACC005)
+    INSERT INTO transactions (account_number, from_account_number, to_account_number, transaction_type, amount, currency, status, description)
+    VALUES ('ACC005', 'ACC005', NULL, 'WITHDRAWAL', 500.00, 'USD', 'COMPLETED', 'ATM withdrawal');
     
     COMMIT;
 END;
