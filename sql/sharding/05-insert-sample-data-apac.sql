@@ -64,29 +64,29 @@ BEGIN
     
     -- Insert accounts for lee_wong
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user1_id, 'ACC015', 'CHECKING', 15000.00, 'CNY', 'APAC');
+    VALUES (v_user1_id, 'ACC015', 'CHECKING', 15000.00, 'USD', 'APAC');
     
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user1_id, 'ACC016', 'SAVINGS', 90000.00, 'CNY', 'APAC');
+    VALUES (v_user1_id, 'ACC016', 'SAVINGS', 90000.00, 'USD', 'APAC');
     
     -- Insert accounts for yuki_tanaka
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user2_id, 'ACC017', 'CHECKING', 18000.00, 'JPY', 'APAC');
+    VALUES (v_user2_id, 'ACC017', 'CHECKING', 18000.00, 'USD', 'APAC');
     
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user2_id, 'ACC018', 'SAVINGS', 120000.00, 'JPY', 'APAC');
+    VALUES (v_user2_id, 'ACC018', 'SAVINGS', 120000.00, 'USD', 'APAC');
     
     -- Insert accounts for raj_kumar
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user3_id, 'ACC019', 'CHECKING', 25000.00, 'INR', 'APAC');
+    VALUES (v_user3_id, 'ACC019', 'CHECKING', 25000.00, 'USD', 'APAC');
     
     -- Insert accounts for wei_zhang
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user4_id, 'ACC020', 'SAVINGS', 75000.00, 'SGD', 'APAC');
+    VALUES (v_user4_id, 'ACC020', 'SAVINGS', 75000.00, 'USD', 'APAC');
     
     -- Insert accounts for min_choi
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user5_id, 'ACC021', 'CHECKING', 14000.00, 'KRW', 'APAC');
+    VALUES (v_user5_id, 'ACC021', 'CHECKING', 14000.00, 'USD', 'APAC');
     
     COMMIT;
     
@@ -102,23 +102,23 @@ BEGIN
     
     -- Deposit for lee_wong''s checking account
     INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
-    VALUES (NULL, v_acc1_id, 'DEPOSIT', 15000.00, 'CNY', 'COMPLETED', 'Initial deposit');
+    VALUES (NULL, v_acc1_id, 'DEPOSIT', 15000.00, 'USD', 'COMPLETED', 'Initial deposit');
     
     -- Transfer from checking to savings
     SELECT MAX(account_id) INTO v_acc1_id FROM accounts WHERE user_id = v_user1_id AND account_type = 'SAVINGS';
     SELECT MIN(account_id) INTO v_acc2_id FROM accounts WHERE user_id = v_user1_id AND account_type = 'CHECKING';
     INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
-    VALUES (v_acc2_id, v_acc1_id, 'TRANSFER', 5000.00, 'CNY', 'COMPLETED', 'Transfer to savings');
+    VALUES (v_acc2_id, v_acc1_id, 'TRANSFER', 5000.00, 'USD', 'COMPLETED', 'Transfer to savings');
     
     -- Deposit for yuki_tanaka
     SELECT MIN(account_id) INTO v_acc1_id FROM accounts WHERE user_id = v_user2_id;
     INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
-    VALUES (NULL, v_acc1_id, 'DEPOSIT', 18000.00, 'JPY', 'COMPLETED', 'Initial deposit');
+    VALUES (NULL, v_acc1_id, 'DEPOSIT', 18000.00, 'USD', 'COMPLETED', 'Initial deposit');
     
     -- Withdrawal for raj_kumar
     SELECT MIN(account_id) INTO v_acc1_id FROM accounts WHERE user_id = v_user3_id;
     INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
-    VALUES (v_acc1_id, NULL, 'WITHDRAWAL', 5000.00, 'INR', 'COMPLETED', 'ATM withdrawal');
+    VALUES (v_acc1_id, NULL, 'WITHDRAWAL', 5000.00, 'USD', 'COMPLETED', 'ATM withdrawal');
     
     COMMIT;
 END;

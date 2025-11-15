@@ -655,13 +655,12 @@
                 }
                 
                 let html = '<table><thead><tr>';
-                html += '<th>ID</th><th>Account Number</th><th>Type</th><th>Owner</th>';
+                html += '<th>Account Number</th><th>Type</th><th>Owner</th>';
                 html += '<th>Balance</th><th>Currency</th><th>Region</th><th>Status</th>';
                 html += '</tr></thead><tbody>';
                 
                 data.forEach(account => {
                     html += '<tr>';
-                    html += `<td>${account.account_id || account.ACCOUNT_ID || '-'}</td>`;
                     html += `<td><strong>${account.account_number || account.ACCOUNT_NUMBER || '-'}</strong></td>`;
                     html += `<td>${account.account_type || account.ACCOUNT_TYPE || '-'}</td>`;
                     const fullName = account.full_name || account.FULL_NAME || '';
@@ -697,19 +696,19 @@
                 }
                 
                 let html = '<table><thead><tr>';
-                html += '<th>ID</th><th>Type</th><th>From</th><th>To</th>';
+                html += '<th>Type</th><th>From</th><th>To</th>';
                 html += '<th>Amount</th><th>Status</th><th>Date</th>';
                 html += '</tr></thead><tbody>';
                 
                 data.forEach(txn => {
                     html += '<tr>';
-                    html += `<td>${txn.transaction_id || txn.TRANSACTION_ID || '-'}</td>`;
                     html += `<td>${txn.transaction_type || txn.TRANSACTION_TYPE || '-'}</td>`;
                     html += `<td>${txn.from_account_number || txn.FROM_ACCOUNT_NUMBER || '-'}</td>`;
                     html += `<td>${txn.to_account_number || txn.TO_ACCOUNT_NUMBER || '-'}</td>`;
                     html += `<td>${formatCurrency(txn.amount || txn.AMOUNT || 0)}</td>`;
                     html += `<td>${txn.status || txn.STATUS || '-'}</td>`;
-                    html += `<td>${txn.transaction_date || txn.TRANSACTION_DATE || '-'}</td>`;
+                    const txnDate = txn.transaction_date || txn.TRANSACTION_DATE;
+                    html += `<td>${txnDate ? (txnDate.split(' ')[0] + ' ' + txnDate.split(' ')[1]?.substring(0, 5)) : '-'}</td>`;
                     html += '</tr>';
                 });
                 
@@ -731,6 +730,7 @@
                 usersCache.forEach(user => {
                     const option = document.createElement('option');
                     // API returns lowercase field names
+                    // user_id is globally unique (ranges: NA=1-10M, EU=10M+1-20M, APAC=20M+1-30M)
                     const userId = user.user_id;
                     const username = user.username;
                     const fullName = user.full_name || '';
@@ -770,12 +770,19 @@
                     data.forEach(account => {
                         const option = document.createElement('option');
                         // API now returns lowercase field names for consistency
-                        const accountId = account.account_id;
+                        // Note: account_id removed (not globally unique)
                         const accountNumber = account.account_number;
                         const balance = account.balance || 0;
-                        option.value = accountId;
+                        // Use account_number as value since it's globally unique across shards
+                        option.value = accountNumber;
                         option.textContent = `${accountNumber} (${formatCurrency(balance)})`;
+                        // Debug: Store account info in data attributes for debugging
+                        option.dataset.accountNumber = accountNumber;
                         select.appendChild(option);
+                        // Debug log for first few accounts
+                        if (select.children.length <= 5) {
+                            console.log(`Added account to ${select.id}: Number=${accountNumber}, Value=${option.value}`);
+                        }
                     });
                 });
             } catch (error) {
@@ -851,47 +858,85 @@
             const formData = new FormData(event.target);
             const data = Object.fromEntries(formData);
             
+            // Read values directly from select elements to ensure we get the correct values
+            // This avoids issues with FormData when fields are hidden/shown
+            const fromAccountSelect = document.getElementById('fromAccountSelect');
+            const toAccountSelect = document.getElementById('toAccountSelect');
+            const transactionTypeSelect = document.getElementById('txnType');
+            const amountInput = event.target.querySelector('input[name="amount"]');
+            const descriptionInput = event.target.querySelector('input[name="description"]');
+            
+            // Get transaction type
+            data.transaction_type = transactionTypeSelect.value;
+            
+            // Get account numbers directly from select elements (values are now account_numbers, not account_ids)
+            const fromAccountValue = fromAccountSelect ? fromAccountSelect.value : '';
+            const toAccountValue = toAccountSelect ? toAccountSelect.value : '';
+            
+            // Get selected option details for debugging
+            const fromOption = fromAccountSelect ? fromAccountSelect.options[fromAccountSelect.selectedIndex] : null;
+            const toOption = toAccountSelect ? toAccountSelect.options[toAccountSelect.selectedIndex] : null;
+            
+            // Debug: Log the raw values from the selects with account numbers
+            console.log('Raw values from selects:', {
+                fromAccountSelect_value: fromAccountValue,
+                fromAccountSelect_text: fromOption ? fromOption.text : 'N/A',
+                fromAccountSelect_accountNumber: fromOption ? fromOption.dataset.accountNumber : 'N/A',
+                toAccountSelect_value: toAccountValue,
+                toAccountSelect_text: toOption ? toOption.text : 'N/A',
+                toAccountSelect_accountNumber: toOption ? toOption.dataset.accountNumber : 'N/A',
+                fromAccountSelect_selectedIndex: fromAccountSelect ? fromAccountSelect.selectedIndex : -1,
+                toAccountSelect_selectedIndex: toAccountSelect ? toAccountSelect.selectedIndex : -1
+            });
+            
             // Clean up based on transaction type and handle empty values
+            // Use account_number instead of account_id since account_id is not globally unique across shards
             if (data.transaction_type === 'DEPOSIT') {
                 data.from_account_id = null;
-                // For deposit, to_account_id is required
-                if (!data.to_account_id || data.to_account_id === '') {
+                data.from_account_number = null;
+                // For deposit, to_account_number is required
+                if (!toAccountValue || toAccountValue === '') {
                     showMessage('Please select a destination account for deposit', 'error');
                     return;
                 }
+                data.to_account_number = toAccountValue;
+                data.to_account_id = null;  // Will be looked up by account_number on server
             } else if (data.transaction_type === 'WITHDRAWAL') {
                 data.to_account_id = null;
-                // For withdrawal, from_account_id is required
-                if (!data.from_account_id || data.from_account_id === '') {
+                data.to_account_number = null;
+                // For withdrawal, from_account_number is required
+                if (!fromAccountValue || fromAccountValue === '') {
                     showMessage('Please select a source account for withdrawal', 'error');
                     return;
                 }
+                data.from_account_number = fromAccountValue;
+                data.from_account_id = null;  // Will be looked up by account_number on server
             } else if (data.transaction_type === 'TRANSFER') {
                 // For transfer, both accounts are required
-                if (!data.from_account_id || data.from_account_id === '') {
+                if (!fromAccountValue || fromAccountValue === '') {
                     showMessage('Please select a source account for transfer', 'error');
                     return;
                 }
-                if (!data.to_account_id || data.to_account_id === '') {
+                if (!toAccountValue || toAccountValue === '') {
                     showMessage('Please select a destination account for transfer', 'error');
+                    return;
+                }
+                // Use account_number (values are now account_numbers)
+                data.from_account_number = fromAccountValue;
+                data.to_account_number = toAccountValue;
+                data.from_account_id = null;  // Will be looked up by account_number on server
+                data.to_account_id = null;  // Will be looked up by account_number on server
+                
+                // Validate that accounts are different
+                if (data.from_account_number === data.to_account_number) {
+                    showMessage('Cannot transfer to the same account. Please select different accounts.', 'error');
                     return;
                 }
             }
             
-            // Convert empty strings to null for proper handling
-            if (data.from_account_id === '' || data.from_account_id === undefined) {
-                data.from_account_id = null;
-            } else {
-                data.from_account_id = parseInt(data.from_account_id);
-            }
-            
-            if (data.to_account_id === '' || data.to_account_id === undefined) {
-                data.to_account_id = null;
-            } else {
-                data.to_account_id = parseInt(data.to_account_id);
-            }
-            
-            data.amount = parseFloat(data.amount);
+            // Get amount and description
+            data.amount = amountInput ? parseFloat(amountInput.value) : parseFloat(data.amount || 0);
+            data.description = descriptionInput ? descriptionInput.value : (data.description || '');
             
             // Debug log
             console.log('Transaction data being sent:', data);
@@ -908,6 +953,9 @@
                 if (result.success) {
                     showMessage('Transaction executed successfully!', 'success');
                     event.target.reset();
+                    // Explicitly reset both account selects to ensure they're cleared
+                    if (fromAccountSelect) fromAccountSelect.value = '';
+                    if (toAccountSelect) toAccountSelect.value = '';
                     updateTransactionForm();
                     refreshDashboard();
                 } else {
@@ -964,6 +1012,7 @@
                 display.value = 'Auto-detected from user';
                 return;
             }
+            // user_id is globally unique (ranges: NA=1-10M, EU=10M+1-20M, APAC=20M+1-30M)
             const user = usersCache.find(u => String(u.user_id || u.USER_ID) === String(selected));
             const region = user ? (user.region || user.REGION || '').toString() : '';
             if (region) {

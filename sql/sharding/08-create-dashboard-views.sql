@@ -12,62 +12,121 @@ CONNECT bank_app/BankAppPass123@freepdb1
 
 -- View for regional statistics
 -- Uses union views to query data from all shards
+-- user_id is globally unique (ranges: NA=1-10M, EU=10M+1-20M, APAC=20M+1-30M)
+-- Transactions are stored on the from_account's shard (or to_account's shard for deposits)
 CREATE OR REPLACE VIEW dashboard_regional_stats AS
+WITH user_account_stats AS (
+    SELECT 
+        COALESCE(a.region, u.region) AS region,
+        COUNT(DISTINCT u.user_id) AS total_users,  -- user_id is globally unique
+        COUNT(DISTINCT a.account_number) AS total_accounts,  -- Use account_number (globally unique)
+        COALESCE(SUM(a.balance), 0) AS total_balance,
+        ROUND(AVG(a.balance), 2) AS avg_balance_per_account
+    FROM users_all u
+    LEFT JOIN accounts_all a ON u.user_id = a.user_id AND u.shard_location = a.shard_location
+    GROUP BY COALESCE(a.region, u.region)
+),
+transaction_stats AS (
+    -- Count transactions by region from transactions_all
+    -- Each transaction appears once in transactions_all (on its own shard)
+    -- Join to accounts_all to get region where transaction is stored
+    -- Uses account_number (globally unique) instead of account_id (not globally unique)
+    SELECT 
+        acc.region,
+        COUNT(*) AS total_transactions,
+        COUNT(CASE WHEN t.transaction_type = 'DEPOSIT' THEN 1 END) AS deposits,
+        COUNT(CASE WHEN t.transaction_type = 'WITHDRAWAL' THEN 1 END) AS withdrawals,
+        COUNT(CASE WHEN t.transaction_type = 'TRANSFER' THEN 1 END) AS transfers,
+        COALESCE(SUM(CASE WHEN t.transaction_type = 'DEPOSIT' THEN t.amount ELSE 0 END), 0) AS total_deposits,
+        COALESCE(SUM(CASE WHEN t.transaction_type = 'WITHDRAWAL' THEN t.amount ELSE 0 END), 0) AS total_withdrawals,
+        COALESCE(SUM(CASE WHEN t.transaction_type = 'TRANSFER' THEN t.amount ELSE 0 END), 0) AS total_transfers
+    FROM transactions_all t
+    JOIN accounts_all acc ON (
+        -- For transfers/withdrawals: transaction is on from_account's shard
+        -- For deposits: transaction is on to_account's shard
+        -- Use account_number (globally unique) instead of account_id
+        (t.from_account_number IS NOT NULL AND t.from_account_number = acc.account_number AND t.shard_location = acc.shard_location)
+        OR
+        (t.from_account_number IS NULL AND t.to_account_number IS NOT NULL AND t.to_account_number = acc.account_number AND t.shard_location = acc.shard_location)
+    )
+    GROUP BY acc.region
+)
 SELECT 
-    COALESCE(a.region, u.region) AS region,
-    COUNT(DISTINCT u.user_id) AS total_users,
-    COUNT(DISTINCT a.account_id) AS total_accounts,
-    COUNT(t.transaction_id) AS total_transactions,
-    COALESCE(SUM(a.balance), 0) AS total_balance,
-    ROUND(AVG(a.balance), 2) AS avg_balance_per_account,
-    COUNT(CASE WHEN t.transaction_type = 'DEPOSIT' THEN 1 END) AS deposits,
-    COUNT(CASE WHEN t.transaction_type = 'WITHDRAWAL' THEN 1 END) AS withdrawals,
-    COUNT(CASE WHEN t.transaction_type = 'TRANSFER' THEN 1 END) AS transfers,
-    COALESCE(SUM(CASE WHEN t.transaction_type = 'DEPOSIT' THEN t.amount ELSE 0 END), 0) AS total_deposits,
-    COALESCE(SUM(CASE WHEN t.transaction_type = 'WITHDRAWAL' THEN t.amount ELSE 0 END), 0) AS total_withdrawals,
-    COALESCE(SUM(CASE WHEN t.transaction_type = 'TRANSFER' THEN t.amount ELSE 0 END), 0) AS total_transfers
-FROM users_all u
-LEFT JOIN accounts_all a ON u.user_id = a.user_id AND u.shard_location = a.shard_location
-LEFT JOIN transactions_all t ON (a.account_id = t.from_account_id OR a.account_id = t.to_account_id)
-GROUP BY COALESCE(a.region, u.region)
-ORDER BY COALESCE(a.region, u.region);
+    COALESCE(uas.region, ts.region) AS region,
+    COALESCE(uas.total_users, 0) AS total_users,
+    COALESCE(uas.total_accounts, 0) AS total_accounts,
+    COALESCE(ts.total_transactions, 0) AS total_transactions,
+    COALESCE(uas.total_balance, 0) AS total_balance,
+    COALESCE(uas.avg_balance_per_account, 0) AS avg_balance_per_account,
+    COALESCE(ts.deposits, 0) AS deposits,
+    COALESCE(ts.withdrawals, 0) AS withdrawals,
+    COALESCE(ts.transfers, 0) AS transfers,
+    COALESCE(ts.total_deposits, 0) AS total_deposits,
+    COALESCE(ts.total_withdrawals, 0) AS total_withdrawals,
+    COALESCE(ts.total_transfers, 0) AS total_transfers
+FROM user_account_stats uas
+FULL OUTER JOIN transaction_stats ts ON uas.region = ts.region
+ORDER BY COALESCE(uas.region, ts.region);
 
 -- View for overall statistics
 -- Uses union views to query data from all shards
+-- user_id is globally unique (ranges: NA=1-10M, EU=10M+1-20M, APAC=20M+1-30M)
 CREATE OR REPLACE VIEW dashboard_overall_stats AS
+WITH account_stats AS (
+    SELECT 
+        COUNT(DISTINCT u.user_id) AS total_users,  -- user_id is globally unique
+        COUNT(DISTINCT a.account_number) AS total_accounts,  -- Use account_number (globally unique)
+        COALESCE(SUM(a.balance), 0) AS total_balance,
+        ROUND(AVG(a.balance), 2) AS avg_balance_per_account
+    FROM users_all u
+    LEFT JOIN accounts_all a ON u.user_id = a.user_id AND u.shard_location = a.shard_location
+),
+transaction_stats AS (
+    -- Simply count all transactions from transactions_all
+    -- transactions_all is a UNION of all shards, so this gives us the total count
+    SELECT 
+        COUNT(*) AS total_transactions,
+        COUNT(CASE WHEN t.status = 'COMPLETED' THEN 1 END) AS completed_transactions,
+        COUNT(CASE WHEN t.status = 'PENDING' THEN 1 END) AS pending_transactions,
+        COUNT(CASE WHEN t.status = 'FAILED' THEN 1 END) AS failed_transactions,
+        COALESCE(SUM(CASE WHEN t.transaction_type = 'DEPOSIT' THEN t.amount ELSE 0 END), 0) AS total_deposits,
+        COALESCE(SUM(CASE WHEN t.transaction_type = 'WITHDRAWAL' THEN t.amount ELSE 0 END), 0) AS total_withdrawals,
+        COALESCE(SUM(CASE WHEN t.transaction_type = 'TRANSFER' THEN t.amount ELSE 0 END), 0) AS total_transfers
+    FROM transactions_all t
+)
 SELECT 
     'TOTAL' AS metric,
-    COUNT(DISTINCT u.user_id) AS total_users,
-    COUNT(DISTINCT a.account_id) AS total_accounts,
-    COUNT(t.transaction_id) AS total_transactions,
-    COALESCE(SUM(a.balance), 0) AS total_balance,
-    ROUND(AVG(a.balance), 2) AS avg_balance_per_account,
-    COUNT(CASE WHEN t.status = 'COMPLETED' THEN 1 END) AS completed_transactions,
-    COUNT(CASE WHEN t.status = 'PENDING' THEN 1 END) AS pending_transactions,
-    COUNT(CASE WHEN t.status = 'FAILED' THEN 1 END) AS failed_transactions,
-    COALESCE(SUM(CASE WHEN t.transaction_type = 'DEPOSIT' THEN t.amount ELSE 0 END), 0) AS total_deposits,
-    COALESCE(SUM(CASE WHEN t.transaction_type = 'WITHDRAWAL' THEN t.amount ELSE 0 END), 0) AS total_withdrawals,
-    COALESCE(SUM(CASE WHEN t.transaction_type = 'TRANSFER' THEN t.amount ELSE 0 END), 0) AS total_transfers
-FROM users_all u
-LEFT JOIN accounts_all a ON u.user_id = a.user_id AND u.shard_location = a.shard_location
-LEFT JOIN transactions_all t ON a.account_id = t.from_account_id OR a.account_id = t.to_account_id;
+    ac.total_users,
+    ac.total_accounts,
+    tx.total_transactions,
+    ac.total_balance,
+    ac.avg_balance_per_account,
+    tx.completed_transactions,
+    tx.pending_transactions,
+    tx.failed_transactions,
+    tx.total_deposits,
+    tx.total_withdrawals,
+    tx.total_transfers
+FROM account_stats ac
+CROSS JOIN transaction_stats tx;
 
 -- View for recent transactions
 -- Uses union views to query data from all shards
+-- Removed transaction_id, from_account_id, to_account_id (not globally unique)
+-- Only includes account_number (globally unique identifier)
 CREATE OR REPLACE VIEW dashboard_recent_transactions AS
 SELECT 
-    t.transaction_id,
-    t.from_account_id,
-    t.to_account_id,
-    t.transaction_type,
-    t.amount,
-    t.status,
-    t.transaction_date,
-    t.description,
-    (SELECT account_number FROM accounts_all WHERE account_id = t.from_account_id AND ROWNUM = 1) AS from_account_number,
-    (SELECT account_number FROM accounts_all WHERE account_id = t.to_account_id AND ROWNUM = 1) AS to_account_number
-FROM transactions_all t
-ORDER BY t.transaction_date DESC
+    from_account_number,
+    to_account_number,
+    transaction_type,
+    amount,
+    status,
+    transaction_date,
+    description,
+    reference_number,
+    shard_location
+FROM transactions_all
+ORDER BY transaction_date DESC
 FETCH FIRST 20 ROWS ONLY;
 
 -- View for account summary by region

@@ -64,29 +64,29 @@ BEGIN
     
     -- Insert accounts for jane_smith
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user1_id, 'ACC008', 'CHECKING', 7500.00, 'GBP', 'EU');
+    VALUES (v_user1_id, 'ACC008', 'CHECKING', 7500.00, 'USD', 'EU');
     
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user1_id, 'ACC009', 'SAVINGS', 30000.00, 'GBP', 'EU');
+    VALUES (v_user1_id, 'ACC009', 'SAVINGS', 30000.00, 'USD', 'EU');
     
     -- Insert accounts for pierre_dupont
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user2_id, 'ACC010', 'CHECKING', 8500.00, 'EUR', 'EU');
+    VALUES (v_user2_id, 'ACC010', 'CHECKING', 8500.00, 'USD', 'EU');
     
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user2_id, 'ACC011', 'SAVINGS', 55000.00, 'EUR', 'EU');
+    VALUES (v_user2_id, 'ACC011', 'SAVINGS', 55000.00, 'USD', 'EU');
     
     -- Insert accounts for hans_mueller
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user3_id, 'ACC012', 'CHECKING', 9200.00, 'EUR', 'EU');
+    VALUES (v_user3_id, 'ACC012', 'CHECKING', 9200.00, 'USD', 'EU');
     
     -- Insert accounts for sophia_rossi
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user4_id, 'ACC013', 'SAVINGS', 68000.00, 'EUR', 'EU');
+    VALUES (v_user4_id, 'ACC013', 'SAVINGS', 68000.00, 'USD', 'EU');
     
     -- Insert accounts for carlos_rodriguez
     INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
-    VALUES (v_user5_id, 'ACC014', 'CHECKING', 6200.00, 'EUR', 'EU');
+    VALUES (v_user5_id, 'ACC014', 'CHECKING', 6200.00, 'USD', 'EU');
     
     COMMIT;
     
@@ -102,23 +102,23 @@ BEGIN
     
     -- Deposit for jane_smith''s checking account
     INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
-    VALUES (NULL, v_acc1_id, 'DEPOSIT', 7500.00, 'GBP', 'COMPLETED', 'Initial deposit');
+    VALUES (NULL, v_acc1_id, 'DEPOSIT', 7500.00, 'USD', 'COMPLETED', 'Initial deposit');
     
     -- Transfer from checking to savings
     SELECT MAX(account_id) INTO v_acc1_id FROM accounts WHERE user_id = v_user1_id AND account_type = 'SAVINGS';
     SELECT MIN(account_id) INTO v_acc2_id FROM accounts WHERE user_id = v_user1_id AND account_type = 'CHECKING';
     INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
-    VALUES (v_acc2_id, v_acc1_id, 'TRANSFER', 3000.00, 'GBP', 'COMPLETED', 'Transfer to savings');
+    VALUES (v_acc2_id, v_acc1_id, 'TRANSFER', 3000.00, 'USD', 'COMPLETED', 'Transfer to savings');
     
     -- Deposit for pierre_dupont
     SELECT MIN(account_id) INTO v_acc1_id FROM accounts WHERE user_id = v_user2_id;
     INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
-    VALUES (NULL, v_acc1_id, 'DEPOSIT', 8500.00, 'EUR', 'COMPLETED', 'Initial deposit');
+    VALUES (NULL, v_acc1_id, 'DEPOSIT', 8500.00, 'USD', 'COMPLETED', 'Initial deposit');
     
     -- Withdrawal for hans_mueller
     SELECT MIN(account_id) INTO v_acc1_id FROM accounts WHERE user_id = v_user3_id;
     INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, currency, status, description)
-    VALUES (v_acc1_id, NULL, 'WITHDRAWAL', 500.00, 'EUR', 'COMPLETED', 'ATM withdrawal');
+    VALUES (v_acc1_id, NULL, 'WITHDRAWAL', 500.00, 'USD', 'COMPLETED', 'ATM withdrawal');
     
     COMMIT;
 END;

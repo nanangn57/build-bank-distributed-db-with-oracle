@@ -190,12 +190,28 @@ build-bank-distributed-db-with-oracle/
 │       ├── 09-create-catalog-metadata.sql   # Routing metadata & helper functions
 │       ├── 10-create-catalog-database-links.sql # DB links from catalog -> shards
 │       ├── 11-create-catalog-union-views.sql    # UNION ALL views (users_all, etc.)
-│       └── 12-example-catalog-queries.sql   # Example catalog queries
+│       ├── 12-example-catalog-queries.sql   # Example catalog queries
+│       ├── 17-create-shard-database-links.sql # DB links on each shard for cross-shard ops
+│       └── 18-remove-to-account-fk.sql      # Remove FK constraint for cross-shard transfers
 ├── scripts/
 │   ├── setup-sharding.sh          # Complete setup script
 │   ├── test-sharding.sh           # Test sharding setup
 │   └── run-use-cases.sh           # Run use cases
-└── README.md
+├── dashboard/                      # Web Dashboard Application
+│   ├── app.py                     # Flask backend API server
+│   ├── requirements.txt           # Python dependencies
+│   ├── start-dashboard.sh        # Dashboard startup script
+│   ├── README.md                  # Dashboard documentation
+│   ├── templates/
+│   │   └── dashboard.html         # Frontend HTML with real-time stats
+│   └── utils/
+│       ├── __init__.py           # Package initialization
+│       ├── db.py                 # Database connection utilities
+│       └── response.py            # Response formatting utilities
+├── docs/                           # Documentation
+│   ├── README-SHARDING.md         # Sharding setup guide
+│   └── SHARDING_GUIDE.md          # Quick reference guide
+└── README.md                       # Main project documentation
 ```
 
 ## Database Schema
