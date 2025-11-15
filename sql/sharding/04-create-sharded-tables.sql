@@ -103,13 +103,14 @@ CREATE TABLE accounts (
     account_number VARCHAR2(20) NOT NULL,
     account_type VARCHAR2(20) NOT NULL CHECK (account_type IN ('CHECKING', 'SAVINGS', 'BUSINESS')),
     balance NUMBER(15,2) DEFAULT 0 CHECK (balance >= 0),
-    currency VARCHAR2(3) DEFAULT 'USD',
+    currency VARCHAR2(3) DEFAULT 'USD' CHECK (currency = 'USD'),  -- All currency must be USD
     region VARCHAR2(50) NOT NULL,  -- Geographic region (must match user's region)
     status VARCHAR2(10) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE', 'CLOSED', 'FROZEN')),
     created_date DATE DEFAULT SYSDATE,
     last_updated DATE DEFAULT SYSDATE,
     CONSTRAINT fk_account_user FOREIGN KEY (user_id) REFERENCES users(user_id),
-    CONSTRAINT chk_account_region CHECK (region IN ('NA', 'EU', 'APAC'))
+    CONSTRAINT chk_account_region CHECK (region IN ('NA', 'EU', 'APAC')),
+    CONSTRAINT uk_accounts_number UNIQUE (account_number)  -- account_number is globally unique
 );
 
 -- Create single sequence for accounts (sharding follows user_id, not account_id)
@@ -147,26 +148,38 @@ BEGIN
     IF :NEW.account_number IS NULL THEN
         :NEW.account_number := 'ACC-' || TO_CHAR(v_account_id);
     END IF;
+    
+    -- Ensure currency is always USD
+    :NEW.currency := 'USD';
 END;
 /
 
 PROMPT Creating Transactions Table (Co-located with accounts)...
 
 -- Create transactions table - Distributed with accounts
--- Transactions stored on same shard as source account
+-- Transactions stored on same shard as source account (TRANSFER/WITHDRAWAL) or destination account (DEPOSIT)
+-- Uses account_number (globally unique) instead of account_id (not globally unique)
+-- account_number column is always NOT NULL and contains the account where transaction is routed
 CREATE TABLE transactions (
     transaction_id NUMBER GENERATED ALWAYS AS IDENTITY,
-    from_account_id NUMBER,
-    to_account_id NUMBER,
+    account_number VARCHAR2(20) NOT NULL,  -- Account where transaction is routed (for sharding and joins)
+    from_account_number VARCHAR2(20),
+    to_account_number VARCHAR2(20),
     transaction_type VARCHAR2(20) NOT NULL CHECK (transaction_type IN ('DEPOSIT', 'WITHDRAWAL', 'TRANSFER', 'FEE', 'INTEREST')),
     amount NUMBER(15,2) NOT NULL CHECK (amount > 0),
-    currency VARCHAR2(3) DEFAULT 'USD',
+    currency VARCHAR2(3) DEFAULT 'USD' CHECK (currency = 'USD'),  -- All currency must be USD
     status VARCHAR2(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'COMPLETED', 'FAILED', 'CANCELLED', 'REVERSED')),
     transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     description VARCHAR2(200),
     reference_number VARCHAR2(50),
-    CONSTRAINT fk_trans_from_account FOREIGN KEY (from_account_id) REFERENCES accounts(account_id),
-    CONSTRAINT fk_trans_to_account FOREIGN KEY (to_account_id) REFERENCES accounts(account_id)
+    CONSTRAINT fk_trans_account_number FOREIGN KEY (account_number) REFERENCES accounts(account_number),
+    CONSTRAINT fk_trans_from_account_number FOREIGN KEY (from_account_number) REFERENCES accounts(account_number),
+    -- Note: No foreign key for to_account_number because it may be on a different shard in cross-shard transfers
+    -- to_account_number is validated in stored procedures via database links
+    CONSTRAINT chk_trans_accounts CHECK (
+        (from_account_number IS NOT NULL AND transaction_type IN ('TRANSFER', 'WITHDRAWAL'))
+        OR (to_account_number IS NOT NULL AND transaction_type IN ('TRANSFER', 'DEPOSIT'))
+    )
 );
 
 PROMPT Creating Indexes...
@@ -181,11 +194,36 @@ CREATE INDEX idx_accounts_number ON accounts(account_number);
 CREATE INDEX idx_accounts_region ON accounts(region);
 CREATE INDEX idx_accounts_status ON accounts(status);
 
-CREATE INDEX idx_trans_from_account ON transactions(from_account_id);
-CREATE INDEX idx_trans_to_account ON transactions(to_account_id);
+CREATE INDEX idx_trans_account_number ON transactions(account_number);  -- Primary index for joins
+CREATE INDEX idx_trans_from_account_number ON transactions(from_account_number);
+CREATE INDEX idx_trans_to_account_number ON transactions(to_account_number);
 CREATE INDEX idx_trans_date ON transactions(transaction_date);
 CREATE INDEX idx_trans_status ON transactions(status);
 CREATE INDEX idx_trans_ref ON transactions(reference_number);
+
+-- Trigger to enforce USD currency and auto-populate account_number
+CREATE OR REPLACE TRIGGER transactions_before_insert
+BEFORE INSERT ON transactions
+FOR EACH ROW
+BEGIN
+    -- Ensure currency is always USD
+    :NEW.currency := 'USD';
+    
+    -- Auto-populate account_number based on transaction type
+    -- For TRANSFER and WITHDRAWAL: use from_account_number (transaction stored on source account shard)
+    -- For DEPOSIT: use to_account_number (transaction stored on destination account shard)
+    IF :NEW.account_number IS NULL THEN
+        IF :NEW.transaction_type IN ('TRANSFER', 'WITHDRAWAL') THEN
+            :NEW.account_number := :NEW.from_account_number;
+        ELSIF :NEW.transaction_type = 'DEPOSIT' THEN
+            :NEW.account_number := :NEW.to_account_number;
+        ELSE
+            -- Fallback: use whichever is not null
+            :NEW.account_number := COALESCE(:NEW.from_account_number, :NEW.to_account_number);
+        END IF;
+    END IF;
+END;
+/
 
 PROMPT ====================================
 PROMPT Distributed tables created successfully on this shard!

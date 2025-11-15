@@ -103,9 +103,53 @@ def get_db_connection(shard_region=None):
         traceback.print_exc()
         return None
 
+def get_user_id_by_username(username):
+    """
+    Look up user_id by username (query directly to shards since user_id removed from views)
+    
+    Args:
+        username (str): Username to look up
+    
+    Returns:
+        dict: User info with 'user_id', 'region', 'shard_location', or None if not found
+    """
+    # Try each shard to find the user
+    for region in ['NA', 'EU', 'APAC']:
+        conn = get_db_connection(shard_region=region)
+        if not conn:
+            continue
+        
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT user_id, region 
+                FROM users 
+                WHERE username = :username
+                FETCH FIRST 1 ROWS ONLY
+            """, {'username': username})
+            user_row = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            
+            if user_row:
+                return {
+                    'user_id': user_row[0],
+                    'region': user_row[1].upper(),
+                    'shard_location': f'SHARD{["NA", "EU", "APAC"].index(region.upper()) + 1}'
+                }
+        except Exception as e:
+            print(f"Error looking up user by username in {region}: {e}")
+            if conn:
+                try:
+                    conn.close()
+                except:
+                    pass
+    
+    return None
+
 def get_user_region(user_id):
     """
-    Look up user's region from catalog database
+    Look up user's region from catalog database (user_id is globally unique)
     
     Args:
         user_id (int): User ID to look up
@@ -139,6 +183,8 @@ def get_user_region(user_id):
 def get_account_region(account_id):
     """
     Look up account's region from catalog database
+    WARNING: account_id is not globally unique across shards!
+    Use get_account_info_by_number() instead for reliable lookups.
     
     Args:
         account_id (int): Account ID to look up
@@ -152,7 +198,15 @@ def get_account_region(account_id):
     
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT region FROM accounts_all WHERE account_id = :account_id", {'account_id': account_id})
+        # Note: account_id is not globally unique, so we might get multiple results
+        # We'll take the first one, but this is not reliable!
+        cursor.execute("""
+            SELECT region, shard_location 
+            FROM accounts_all 
+            WHERE account_id = :account_id 
+            ORDER BY shard_location
+            FETCH FIRST 1 ROWS ONLY
+        """, {'account_id': account_id})
         account_row = cursor.fetchone()
         cursor.close()
         conn.close()
@@ -162,6 +216,94 @@ def get_account_region(account_id):
         return None
     except Exception as e:
         print(f"Error looking up account region: {e}")
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+        return None
+
+def get_account_info_by_number(account_number):
+    """
+    Look up account information by account_number (which is globally unique)
+    
+    Args:
+        account_number (str): Account number to look up
+    
+    Returns:
+        dict: Account info with 'account_number', 'region', 'shard_location', or None if not found
+    """
+    conn = get_db_connection()
+    if not conn:
+        return None
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT account_number, region, shard_location 
+            FROM accounts_all 
+            WHERE account_number = :account_number
+            FETCH FIRST 1 ROWS ONLY
+        """, {'account_number': account_number})
+        account_row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if account_row:
+            return {
+                'account_number': account_row[0],
+                'region': account_row[1].upper(),
+                'shard_location': account_row[2]
+            }
+        return None
+    except Exception as e:
+        print(f"Error looking up account by number: {e}")
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+        return None
+
+def get_account_id_by_number(account_number):
+    """
+    Look up account_id by account_number (which is globally unique)
+    NOTE: account_id is not globally unique and is not in accounts_all view.
+    This function queries directly from the shard to get account_id if needed.
+    
+    Args:
+        account_number (str): Account number to look up
+    
+    Returns:
+        int: Account ID or None if not found
+    """
+    # First get region to know which shard to query
+    account_info = get_account_info_by_number(account_number)
+    if not account_info:
+        return None
+    
+    region = account_info['region']
+    conn = get_db_connection(shard_region=region)
+    if not conn:
+        return None
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT account_id 
+            FROM accounts 
+            WHERE account_number = :account_number
+            FETCH FIRST 1 ROWS ONLY
+        """, {'account_number': account_number})
+        account_row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if account_row:
+            return account_row[0]
+        return None
+    except Exception as e:
+        print(f"Error looking up account_id by number: {e}")
         if conn:
             try:
                 conn.close()

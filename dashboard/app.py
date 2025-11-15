@@ -7,7 +7,7 @@ Provides REST API endpoints for dashboard statistics and data insertion
 from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 import os
-from utils import get_db_connection, get_user_region, get_account_region, cursor_to_dict, cursor_to_dicts
+from utils import get_db_connection, get_user_region, get_account_region, get_account_info_by_number, get_account_id_by_number, cursor_to_dict, cursor_to_dicts
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -164,7 +164,7 @@ def insert_account():
         if not user_id:
             return jsonify({'error': 'user_id is required'}), 400
         
-        # Look up user's region from catalog
+        # Look up user's region from catalog (user_id is globally unique)
         region = get_user_region(user_id)
         if not region:
             return jsonify({'error': f'User with user_id {user_id} not found'}), 404
@@ -177,6 +177,7 @@ def insert_account():
         cursor = shard_conn.cursor()
         
         # Note: account_id is auto-generated, region should match user's region
+        # Currency is always USD (enforced by constraint and trigger)
         cursor.execute("""
             INSERT INTO accounts (user_id, account_number, account_type, balance, currency, region)
             VALUES (:user_id, :account_number, :account_type, :balance, :currency, :region)
@@ -185,7 +186,7 @@ def insert_account():
             'account_number': data.get('account_number'),
             'account_type': data.get('account_type'),
             'balance': data.get('balance', 0),
-            'currency': data.get('currency', 'USD'),
+            'currency': 'USD',  # Always USD (enforced by constraint and trigger)
             'region': region
         })
         
@@ -207,46 +208,64 @@ def insert_transaction():
         
         # Validate and clean data
         transaction_type = data.get('transaction_type')
-        from_account_id = data.get('from_account_id')
-        to_account_id = data.get('to_account_id')
+        # Only use account_number (account_id is not globally unique across shards)
+        from_account_number = data.get('from_account_number')
+        to_account_number = data.get('to_account_number')
         amount = data.get('amount')
         
-        # Convert to appropriate types and handle None/empty
-        if from_account_id and from_account_id != '':
-            from_account_id = int(from_account_id)
-        else:
-            from_account_id = None
-            
-        if to_account_id and to_account_id != '':
-            to_account_id = int(to_account_id)
-        else:
-            to_account_id = None
+        from_account_info = None
+        to_account_info = None
         
+        # Look up account info by account_number (required method)
+        # account_id is NOT globally unique across shards, so we MUST use account_number
+        if from_account_number:
+            from_account_info = get_account_info_by_number(from_account_number)
+            if not from_account_info:
+                return jsonify({'error': f'Account with number {from_account_number} not found'}), 404
+        else:
+            from_account_info = None
+            
+        if to_account_number:
+            to_account_info = get_account_info_by_number(to_account_number)
+            if not to_account_info:
+                return jsonify({'error': f'Account with number {to_account_number} not found'}), 404
+        else:
+            to_account_info = None
+            
         if amount:
             amount = float(amount)
         
         # Validate required fields based on transaction type
         if transaction_type == 'TRANSFER':
-            if not from_account_id or not to_account_id:
-                return jsonify({'error': 'Transfer requires both from_account_id and to_account_id'}), 400
-            if from_account_id == to_account_id:
+            # For transfers, we MUST have account numbers to uniquely identify accounts
+            if not from_account_number or not to_account_number:
+                return jsonify({'error': 'Transfer requires both from_account_number and to_account_number. Account IDs are not globally unique across shards.'}), 400
+            if not from_account_info or not to_account_info:
+                return jsonify({'error': 'Could not find account information. Please ensure account numbers are correct.'}), 404
+            if from_account_number == to_account_number:
                 return jsonify({'error': 'Cannot transfer to the same account'}), 400
+            # Transactions are stored on the source account's shard
+            # Connect to the from_account's shard
+            region = from_account_info['region']
+            print(f"Transfer: from_account {from_account_number} (region={region}) to to_account {to_account_number}")
         elif transaction_type == 'DEPOSIT':
-            if not to_account_id:
-                return jsonify({'error': 'Deposit requires to_account_id'}), 400
-            from_account_id = None
+            # For deposits, we MUST have account_number to uniquely identify the account
+            if not to_account_number:
+                return jsonify({'error': 'Deposit requires to_account_number. Account IDs are not globally unique across shards.'}), 400
+            if not to_account_info:
+                return jsonify({'error': f'Account with number {to_account_number} not found'}), 404
+            region = to_account_info['region']
+            print(f"Deposit: to_account {to_account_number} (region={region})")
         elif transaction_type == 'WITHDRAWAL':
-            if not from_account_id:
-                return jsonify({'error': 'Withdrawal requires from_account_id'}), 400
-            to_account_id = None
-        
-        # Determine which account_id to use for region lookup
-        account_id_for_region = from_account_id if from_account_id else to_account_id
-        
-        # Look up account region from catalog to determine which shard to use
-        region = get_account_region(account_id_for_region)
-        if not region:
-            return jsonify({'error': f'Account with account_id {account_id_for_region} not found'}), 404
+            # For withdrawals, we MUST have account_number to uniquely identify the account
+            if not from_account_number:
+                return jsonify({'error': 'Withdrawal requires from_account_number. Account IDs are not globally unique across shards.'}), 400
+            if not from_account_info:
+                return jsonify({'error': f'Account with number {from_account_number} not found'}), 404
+            region = from_account_info['region']
+            print(f"Withdrawal: from_account {from_account_number} (region={region})")
+        else:
+            return jsonify({'error': f'Invalid transaction type: {transaction_type}'}), 400
         
         # Connect to the appropriate shard based on account's region
         conn = get_db_connection(shard_region=region)
@@ -256,12 +275,13 @@ def insert_transaction():
         cursor = conn.cursor()
         
         # Use stored procedures for all transaction types (handle balance updates automatically)
+        # Procedures now use account_number (globally unique) instead of account_id
         try:
-            if transaction_type == 'TRANSFER' and from_account_id and to_account_id:
-                print(f"Calling transfer_money procedure: from={from_account_id}, to={to_account_id}, amount={amount}")
+            if transaction_type == 'TRANSFER' and from_account_number and to_account_number:
+                print(f"Calling transfer_money procedure: from={from_account_number}, to={to_account_number}, amount={amount}")
                 cursor.callproc('transfer_money', [
-                    from_account_id,
-                    to_account_id,
+                    from_account_number,
+                    to_account_number,
                     amount,
                     data.get('description', '')
                 ])
@@ -269,10 +289,10 @@ def insert_transaction():
                 cursor.close()
                 conn.close()
                 return jsonify({'success': True, 'message': 'Transfer completed successfully'})
-            elif transaction_type == 'DEPOSIT' and to_account_id:
-                print(f"Calling deposit_money procedure: to={to_account_id}, amount={amount}")
+            elif transaction_type == 'DEPOSIT' and to_account_number:
+                print(f"Calling deposit_money procedure: to={to_account_number}, amount={amount}")
                 cursor.callproc('deposit_money', [
-                    to_account_id,
+                    to_account_number,
                     amount,
                     data.get('description', '')
                 ])
@@ -280,10 +300,10 @@ def insert_transaction():
                 cursor.close()
                 conn.close()
                 return jsonify({'success': True, 'message': 'Deposit completed successfully'})
-            elif transaction_type == 'WITHDRAWAL' and from_account_id:
-                print(f"Calling withdraw_money procedure: from={from_account_id}, amount={amount}")
+            elif transaction_type == 'WITHDRAWAL' and from_account_number:
+                print(f"Calling withdraw_money procedure: from={from_account_number}, amount={amount}")
                 cursor.callproc('withdraw_money', [
-                    from_account_id,
+                    from_account_number,
                     amount,
                     data.get('description', '')
                 ])
@@ -294,11 +314,11 @@ def insert_transaction():
             else:
                 # Fallback for other transaction types or invalid combinations
                 cursor.execute("""
-                    INSERT INTO transactions (from_account_id, to_account_id, transaction_type, amount, status, description)
-                    VALUES (:from_account_id, :to_account_id, :transaction_type, :amount, :status, :description)
+                    INSERT INTO transactions (from_account_number, to_account_number, transaction_type, amount, status, description)
+                    VALUES (:from_account_number, :to_account_number, :transaction_type, :amount, :status, :description)
                 """, {
-                    'from_account_id': from_account_id,
-                    'to_account_id': to_account_id,
+                    'from_account_number': from_account_number,
+                    'to_account_number': to_account_number,
                     'transaction_type': transaction_type,
                     'amount': amount,
                     'status': data.get('status', 'COMPLETED'),
@@ -340,6 +360,7 @@ def get_users():
     try:
         cursor = conn.cursor()
         # Use users_all view which unions data from all shards via catalog
+        # user_id is globally unique (ranges: NA=1-10M, EU=10M+1-20M, APAC=20M+1-30M)
         cursor.execute("SELECT user_id, username, full_name, region FROM users_all ORDER BY username")
         
         results = []
@@ -368,23 +389,22 @@ def get_accounts():
     try:
         cursor = conn.cursor()
         # Get accounts with user information for the list view
-        # Use union views which combine data from all shards via catalog
+        # user_id is globally unique, account_id removed (not globally unique)
         cursor.execute("""
             SELECT 
-                a.account_id,
                 a.account_number,
+                a.user_id,
                 a.account_type,
                 a.balance,
                 a.currency,
                 a.region,
                 a.status,
                 a.created_date,
-                u.user_id,
                 u.username,
                 u.full_name
             FROM accounts_all a
             LEFT JOIN users_all u ON a.user_id = u.user_id AND a.shard_location = u.shard_location
-            ORDER BY a.account_id
+            ORDER BY a.account_number
         """)
         results = cursor_to_dicts(cursor)
         
@@ -407,6 +427,7 @@ def get_users_list():
     try:
         cursor = conn.cursor()
         # Use union views which combine data from all shards via catalog
+        # user_id is globally unique (ranges: NA=1-10M, EU=10M+1-20M, APAC=20M+1-30M)
         cursor.execute("""
             SELECT 
                 u.user_id,
@@ -417,7 +438,7 @@ def get_users_list():
                 u.address,
                 u.region,
                 u.created_date,
-                COUNT(DISTINCT a.account_id) AS account_count,
+                COUNT(DISTINCT a.account_number) AS account_count,  -- Use account_number (globally unique)
                 COALESCE(SUM(a.balance), 0) AS total_balance
             FROM users_all u
             LEFT JOIN accounts_all a ON u.user_id = a.user_id AND u.shard_location = a.shard_location
