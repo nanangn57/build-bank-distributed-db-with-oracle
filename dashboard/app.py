@@ -115,6 +115,158 @@ def get_transactions_by_date():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/transactions/by-type', methods=['GET'])
+def get_transactions_by_type():
+    """Get transaction statistics by type"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM dashboard_transactions_by_type")
+        results = cursor_to_dicts(cursor)
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/transactions/by-status', methods=['GET'])
+def get_transactions_by_status():
+    """Get transaction statistics by status"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM dashboard_transactions_by_status")
+        results = cursor_to_dicts(cursor)
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/transactions/by-region', methods=['GET'])
+def get_transactions_by_region():
+    """Get transaction statistics by region"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM dashboard_transactions_by_region")
+        results = cursor_to_dicts(cursor)
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/transactions/by-hour', methods=['GET'])
+def get_transactions_by_hour():
+    """Get transaction volume by hour for today"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM dashboard_transactions_by_hour")
+        results = cursor_to_dicts(cursor)
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/transactions/top', methods=['GET'])
+def get_top_transactions():
+    """Get top transactions by amount"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM dashboard_top_transactions")
+        results = cursor_to_dicts(cursor)
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/transactions/success-rate', methods=['GET'])
+def get_transaction_success_rate():
+    """Get transaction success rate summary"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM dashboard_transaction_success_rate")
+        result = cursor_to_dict(cursor)
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/transactions/by-week', methods=['GET'])
+def get_transactions_by_week():
+    """Get transaction volume by week"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM dashboard_transactions_by_week")
+        results = cursor_to_dicts(cursor)
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/transactions/count-verification', methods=['GET'])
+def get_transaction_count_verification():
+    """Verify transaction counts match between transactions_all and dashboard_regional_stats"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM dashboard_transaction_count_verification")
+        results = cursor_to_dicts(cursor)
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/insert/user', methods=['POST'])
 def insert_user():
     """Insert a new user"""

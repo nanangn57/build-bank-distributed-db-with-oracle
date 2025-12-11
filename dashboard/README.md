@@ -52,9 +52,24 @@ Or set these in a `.env` file in the project root.
 
 ## API Endpoints
 
+### Statistics
 - `GET /api/stats/regional` - Regional statistics
 - `GET /api/stats/overall` - Overall statistics
-- `GET /api/transactions/recent` - Recent transactions
+- `GET /api/accounts/by-region` - Account breakdown by region
+
+### Transaction Statistics (based on transactions_all)
+- `GET /api/transactions/recent` - Recent transactions (last 20)
+- `GET /api/transactions/by-date` - Transaction volume by date (last 30 days)
+- `GET /api/transactions/by-type` - Transaction statistics by type (DEPOSIT, WITHDRAWAL, TRANSFER)
+- `GET /api/transactions/by-status` - Transaction statistics by status (COMPLETED, PENDING, FAILED)
+- `GET /api/transactions/by-region` - Transaction statistics by region
+- `GET /api/transactions/by-hour` - Transaction volume by hour (today)
+- `GET /api/transactions/by-week` - Transaction volume by week (last 90 days)
+- `GET /api/transactions/top` - Top 50 transactions by amount
+- `GET /api/transactions/success-rate` - Transaction success rate summary
+- `GET /api/transactions/count-verification` - Verify transaction counts match (diagnostic)
+
+### Data Management
 - `GET /api/users` - List all users
 - `GET /api/accounts` - List all accounts
 - `POST /api/insert/user` - Insert new user
